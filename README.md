@@ -24,12 +24,11 @@ Repository for ZeroShot-Grasping project
 
 0. [Dinov2](https://arxiv.org/abs/2304.07193) | [Github](https://github.com/facebookresearch/dinov2)
 1. [Zero-Shot Category Level Object Pose Estimation](https://arxiv.org/abs/2204.03635) | [Github](https://github.com/applied-ai-lab/zero-shot-pose)
-2. []()
-3. []()
-4. []()
-5. []()
-6. []()
-7. []()
+2. [Lightweight Convolutional Neural Network with
+Gaussian-based Grasping Representation](https://arxiv.org/pdf/2101.10226.pdf)
+3. [SurfEmb](https://arxiv.org/pdf/2111.13489.pdf) | [Github](https://github.com/rasmushaugaard/surfemb)
+4. [TransGrasp](https://arxiv.org/pdf/2207.07861.pdf) | [Github](https://github.com/yanjh97/TransGrasp)
+
 
 ## Dataset Links
 1. [GraspNet](https://graspnet.net)
