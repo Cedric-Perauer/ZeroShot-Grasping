@@ -16,9 +16,9 @@ from PIL import Image
 # Typing
 from typing import List
 
-co3d_root = '/home/cedric/zero-shot-pose/co3d/'
-label_dir = '/home/cedric/zero-shot-pose/data/class_labels/'
-jacquard_root  = os.path.expanduser("~") + '/zero-shot-pose/Jacquard/Samples/'
+co3d_root = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/co3d/'
+label_dir = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/data/class_labels/'
+jacquard_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Jacquard/Samples/'
 
 class TestDataset(Dataset):
     
