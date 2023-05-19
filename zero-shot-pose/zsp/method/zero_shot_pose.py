@@ -388,7 +388,11 @@ class DescriptorExtractor():
         image = image * torch.Tensor(self.image_norm_std)[:, None, None]
         image = image + torch.Tensor(self.image_norm_mean)[:, None, None]
         return Image.fromarray((image.permute(1, 2, 0) * 255).numpy().astype(np.uint8))
-
+    
+    def torch_to_pil(self, image):
+        return (image.permute(1, 2, 0) * 255).numpy().astype(np.uint8)
+    
+    
 
 class ZeroShotPoseMethod():
     def __init__(

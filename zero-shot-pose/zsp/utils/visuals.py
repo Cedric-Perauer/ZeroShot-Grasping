@@ -137,6 +137,8 @@ def draw_correspondences_lines(points1, points2, image1, image2, ax):
     points2 += np.array([0, gap+image1.width])
     for point1, point2, color in zip(points1, points2, colors):
         y1, x1 = point1
+        if x1 < 0 : 
+            continue
         circ1_1 = plt.Circle((x1, y1), radius1, facecolor=color, edgecolor='white', alpha=0.5)
         circ1_2 = plt.Circle((x1, y1), radius2, facecolor=color, edgecolor='white')
         ax.add_patch(circ1_1)

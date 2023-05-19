@@ -10,6 +10,7 @@ from pytorch3d.ops import utils as oputil
 from pytorch3d.renderer.cameras import get_world_to_view_transform
 import torchvision 
 from PIL import Image
+import cv2
 
 # Descriptor extractor 
 from zsp.method.zero_shot_pose import DescriptorExtractor, ZeroShotPoseMethod
@@ -182,7 +183,7 @@ for category in ["Jacquard"] :
         #img_ref = Image.open(img1_path)
         #img_target = Image.open(img2_path)
         
-        ref_image, all_target_images = batch 
+        ref_image, all_target_images, mask_ref, mask_targets = batch 
         batch_size = ref_image.size(0)
         all_images = torch.cat([ref_image.unsqueeze(1), all_target_images], dim=1).to(device) # B x (N_TGT + 1) x 3 x S x S
         # Extract features, attention maps, and cls_tokens
@@ -204,7 +205,7 @@ for category in ["Jacquard"] :
         except :
             ## sometimes an issue can occur 
             continue
-
+        
         # ----------------
         # GET CORRESPONDENCES
         # ----------------
@@ -212,6 +213,20 @@ for category in ["Jacquard"] :
             selected_points_image_1, # 10x50x2
             cyclical_dists,          # 10x28x28
             sim_selected_12) = desc.get_correspondences(ref_feats, target_feats, ref_attn, target_attn, device)
+        
+        new_arr_1 = []
+        new_arr_2 = []
+        
+        #remove all the points that are outside the mask
+        
+        #cur1.append(pts)
+        #pts2 = selected_points_image_2[i,j]
+        #cur2.append(pts2)
+        #import pdb; pdb.set_trace()
+        #filter the points that are outside the mask 
+        
+        
+        
         #  sim_selected_12 has shape 10x50
         # ----------------
         # FIND BEST IMAGE IN TARGET SEQ
@@ -219,6 +234,7 @@ for category in ["Jacquard"] :
         _, _, _, t, t = attn.size()
         N = int(np.sqrt(t - 1)) # N is the height or width of the feature map
         similarities, best_idxs = desc.find_closest_match(attn, output_cls_tokens, sim_selected_12, batch_size)
+        #import pdb; pdb.set_trace() 
         # -----------------
         # COMPUTE POSE OFFSET
         # -----------------
@@ -314,7 +330,21 @@ for category in ["Jacquard"] :
             #    f = open(os.path.join(cat_log_dir, f"{args.best_frame_mode}_bestview.txt"), "a")
             #    f.write(f"Error: {rotation_err[0]}\n")
             #    f.close()
-
+        for i in range(len(all_points1)):
+                    for j,pts in enumerate(all_points1[i]) :
+                            x,y = pts
+                            mask_value = mask_ref[0,0,x,y]
+                            #import pdb; pdb.set_trace()
+                            #print(mask_value)
+                            if mask_value.item() == 0 :
+                                #import pdb; pdb.set_trace()        
+                                #set correspondences that are outside of the object area to 0 
+                                # right now : ref mask is used, should be changed to query mask later
+                                all_points1[i][j] = torch.Tensor([-1,-1])
+                                all_points2[i][j] = torch.Tensor([-1,-1])
+            
+        
+        
         if plot_results:
 
             # -----------------
@@ -334,14 +364,24 @@ for category in ["Jacquard"] :
                 axs['A'].set_title('Reference image')
                 axs['B'].set_title('Query images')
                 axs['C'].set_title('Correspondences')
-                #axs['D'].set_title('Reference object in query pose')
+                axs['D'].set_title('Reference object mask')
                 fig.suptitle(f'Error: n/a', fontsize=6)
                 axs['A'].imshow(desc.denorm_torch_to_pil(ref_image[i]))
+                
                 # ax[1].plot(similarities[i].cpu().numpy())
                 tgt_pils = [desc.denorm_torch_to_pil(
                     all_target_images[i][j]) for j in range(args.n_target)]
                 tgt_pils = tile_ims_horizontal_highlight_best(tgt_pils, highlight_idx=best_idxs[i])
                 axs['B'].imshow(tgt_pils)
+                print(desc.torch_to_pil(mask_ref[0]).shape)
+                axs['D'].imshow(desc.torch_to_pil(mask_ref[0]),cmap='Greys_r')
+                for pts in all_points1[i]:
+                    x1,y1 = pts
+                    if x1 < 0 : 
+                        continue
+                    radius2 = 2
+                    circ1 = plt.Circle((x1, y1), radius2, facecolor='blue', edgecolor='white')
+                    axs['D'].scatter([y1],[x1])
 
                 draw_correspondences_lines(all_points1[i], all_points2[i],
                                         desc.denorm_torch_to_pil(ref_image[i]),

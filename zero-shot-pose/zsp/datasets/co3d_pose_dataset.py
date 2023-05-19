@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 import torch
 import numpy as np
 import random
+from torchvision import transforms
 
 # I/O
 import os
@@ -21,6 +22,9 @@ label_dir = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/data/cl
 jacquard_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Jacquard/Samples/'
 
 class TestDataset(Dataset):
+    '''
+    very simple dataloader to test some stuff on Jacquard samples dataset
+    '''
     
     def __init__(self,dataset_root=jacquard_root,
                  image_transform=None,
@@ -29,16 +33,29 @@ class TestDataset(Dataset):
         self.image_transform = image_transform
         self.classes = os.listdir(dataset_root)
         self.items = []
+        self.transform_tensor = transforms.Compose([transforms.Resize((224,224)),
+                                                    transforms.ToTensor()])
         for cat in self.classes :
             if os.path.isdir(self.dataset_root + cat) == False:
                 continue
             cur_dict = {}
             imgs = os.listdir(self.dataset_root + cat)
             imgs = [self.dataset_root + cat + "/" + i for i in imgs if i.endswith('.jpg') or i.endswith('.png')]
-            imgs = [i for i in imgs if 'RGB' in i]
+            masks = [i.split('/')[-1] for i in imgs if 'mask' in i]
+            imgs = [i.split('/')[-1] for i in imgs if 'RGB' in i]
+            
+            imgs = sorted(imgs, key=lambda x: int(x.split('_')[0]))
+            masks = sorted(masks, key=lambda x: int(x.split('_')[0]))
+            masks = [self.dataset_root + cat + "/" + i for i in masks]
+            imgs = [self.dataset_root + cat + "/" + i for i in imgs]
+                        
             cur_dict['ref_image_rgb'] = imgs[0]
+            cur_dict['ref_image_mask'] = masks[0]
             up = num_targets + 1 if len(imgs) > num_targets else len(imgs) + 1
+            cur_dict['target_images_masks'] = masks[1:up]
             cur_dict['target_images_rgb'] = imgs[1:up]
+            ##tbd : get grasp labels 
+            
             self.items.append(cur_dict)
     
     def __len__(self):
@@ -47,13 +64,18 @@ class TestDataset(Dataset):
     def __getitem__(self,index):
         img_ref = self.items[index]['ref_image_rgb']
         target_imgs = self.items[index]['target_images_rgb']
+        mask_ref = self.items[index]['ref_image_mask']
+        mask_target = self.items[index]['target_images_masks']
         
         img_ref = Image.open(img_ref) 
         img_ref = self.image_transform(img_ref)
+        mask_ref = self.transform_tensor(Image.open(mask_ref))
+        mask_target = [self.transform_tensor(Image.open(i)) for i in mask_target]
+        
         target_imgs = [self.image_transform(Image.open(i)) for i in target_imgs]
         target_imgs = torch.stack(target_imgs)
 
-        return img_ref, target_imgs
+        return img_ref, target_imgs, mask_ref,mask_target
         
         
         
