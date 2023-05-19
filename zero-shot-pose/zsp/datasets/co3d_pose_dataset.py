@@ -8,11 +8,13 @@ import torch
 import numpy as np
 import random
 from torchvision import transforms
-
+import math
+import cv2
+import shutil
 # I/O
 import os
 import json
-from PIL import Image
+from PIL import Image, ImageDraw
 
 # Typing
 from typing import List
@@ -28,10 +30,13 @@ class TestDataset(Dataset):
     
     def __init__(self,dataset_root=jacquard_root,
                  image_transform=None,
-                 num_targets=1):
+                 num_targets=1,vis=False):
         self.dataset_root = dataset_root
         self.image_transform = image_transform
+        self.img_vis_dir = 'labels_vis/'
         self.classes = os.listdir(dataset_root)
+        #if self.img_vis_dir[:-1] in self.classes : 
+        #    self.classes.remove(self.img_vis_dir[:-1])
         self.items = []
         self.transform_tensor = transforms.Compose([transforms.Resize((224,224)),
                                                     transforms.ToTensor()])
@@ -39,16 +44,43 @@ class TestDataset(Dataset):
             if os.path.isdir(self.dataset_root + cat) == False:
                 continue
             cur_dict = {}
-            imgs = os.listdir(self.dataset_root + cat)
-            imgs = [self.dataset_root + cat + "/" + i for i in imgs if i.endswith('.jpg') or i.endswith('.png')]
+            fs = os.listdir(self.dataset_root + cat)
+            
+            imgs = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.jpg') or i.endswith('.png')]
+            grasp_txts = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.txt')]
             masks = [i.split('/')[-1] for i in imgs if 'mask' in i]
+            grasp_txts = [i.split('/')[-1] for i in grasp_txts]
             imgs = [i.split('/')[-1] for i in imgs if 'RGB' in i]
             
             imgs = sorted(imgs, key=lambda x: int(x.split('_')[0]))
             masks = sorted(masks, key=lambda x: int(x.split('_')[0]))
+            grasp_txts = sorted(grasp_txts, key=lambda x: int(x.split('_')[0]))
             masks = [self.dataset_root + cat + "/" + i for i in masks]
             imgs = [self.dataset_root + cat + "/" + i for i in imgs]
-                        
+            grasp_txts = [self.dataset_root + cat + "/" + i for i in grasp_txts]
+            grasps = []
+            self.img_cnt = 0
+            store_dir = self.dataset_root + cat + '/' + self.img_vis_dir
+            if os.path.exists(store_dir) == True: 
+                shutil.rmtree(store_dir)
+            os.makedirs(store_dir)
+            for idx,txt in enumerate(grasp_txts):
+                grasp = []
+                with open(txt,'r') as f:
+                    lines = f.readlines()
+                    for l in lines :
+                        split = l.split(';')
+                        x,y,angle,w,h = split 
+                        h = h.split('\n')[0]
+                        x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
+                        grasp.append([x,y,angle,w,h])
+                        grasps.append(grasp)
+                    if vis == True :
+                        self.visualize(imgs[idx],grasp,store_dir)
+                        self.img_cnt += 1
+            
+                
+                
             cur_dict['ref_image_rgb'] = imgs[0]
             cur_dict['ref_image_mask'] = masks[0]
             up = num_targets + 1 if len(imgs) > num_targets else len(imgs) + 1
@@ -57,6 +89,75 @@ class TestDataset(Dataset):
             ##tbd : get grasp labels 
             
             self.items.append(cur_dict)
+    
+    def distance(self,ax, ay, bx, by):
+        return math.sqrt((by - ay)**2 + (bx - ax)**2)
+    
+    def rotated_about(self,ax, ay, bx, by, angle):
+        radius = self.distance(ax,ay,bx,by)
+        angle += math.atan2(ay-by, ax-bx)
+        return (
+            round(bx + radius * math.cos(angle)),
+            round(by + radius * math.sin(angle))
+        )
+            
+    def rotate_points(self,center,points,theta):
+        pts_new = []
+        cx,cy = center
+        for pt in points:
+            x,y = pt
+            tempX = x - cx
+            tempY = y - cy
+            
+            rotatedX = tempX*np.cos(theta) - tempY*np.sin(theta);
+            rotatedY = tempX*np.sin(theta) + tempY*np.cos(theta);
+        
+    
+    def visualize(self,img,grasp,store_dir):
+        #img = Image.open(img) 
+        img = cv2.imread(img)
+        #draw = ImageDraw.Draw(img)
+        mids = []
+        for n,el in enumerate(grasp) : 
+            x,y,angle,w,h = el
+            if [x,y] in mids:
+                continue
+            mids.append([x,y])
+            tl = (x - w/2, y - h/2)
+            bl = (x - w/2, y + h/2)
+            tr = (x+ w/2, y - h/2)
+            br = (x + w/2, y + h/2)
+            points = [br,tr,tl,bl]
+            #tl,bl,tr,br = self.rotate_points((x,y),points,angle) 
+            #print(len(points))
+            square_vertices = [self.rotated_about(pt[0],pt[1], x, y, math.radians(angle)) for pt in points]      
+            br,tr,tl,bl = square_vertices
+            br = [int(i) for i in br]
+            tr = [int(i) for i in tr]
+            bl = [int(i) for i in bl]
+            tl = [int(i) for i in tl]
+            
+            #print(len(square_vertices))    
+            color1 = (list(np.random.choice(range(256), size=3)))  
+            color =[int(color1[0]), int(color1[1]), int(color1[2])]  
+            img = cv2.line(img,tl,bl,color,thickness=2)
+            img = cv2.line(img,tr,br,color,thickness=2)
+            img = cv2.line(img,br,bl,color,thickness=2)
+            img = cv2.line(img,tr,tl,color,thickness=2)
+            #cv2.imshow('img',img)
+            #cv2.waitKey(0)
+            
+            #draw.polygon(square_vertices, outline=(0,0,0))
+            
+            
+            
+            rad = 5
+            #draw.ellipse((x-rad, y -rad, x + rad, y + rad), fill=(255, 0, 0), outline=(0, 0, 0))
+        
+        
+        cv2.imwrite(store_dir + str(self.img_cnt) + '.png',img)
+            
+        
     
     def __len__(self):
         return len(self.items)

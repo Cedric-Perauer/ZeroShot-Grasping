@@ -138,7 +138,7 @@ categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handb
 idx_plot = 0
 
 image_transform = desc.get_transform()
-dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target)
+dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True)
 
 for category in ["Jacquard"] :
     cat_log_dir, fig_dir = pose.make_log_dirs(log_dir, category)
@@ -342,8 +342,13 @@ for category in ["Jacquard"] :
                                 # right now : ref mask is used, should be changed to query mask later
                                 all_points1[i][j] = torch.Tensor([-1,-1])
                                 all_points2[i][j] = torch.Tensor([-1,-1])
-            
         
+        out1 = all_points1[0][all_points1[0][:,0] != -1].numpy().reshape(-1,1,2).astype(np.float32)
+        out2 = all_points2[0][all_points2[0][:,0] != -1].numpy().reshape(-1,1,2).astype(np.float32)
+        
+        matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
+        # applying perspective algorithm
+        dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
         
         if plot_results:
 
@@ -357,7 +362,7 @@ for category in ["Jacquard"] :
                 save_name = os.path.join(fig_dir, save_name)
 
                 fig, axs = plt.subplot_mosaic([['A', 'B', 'B'],
-                                            ['C', 'C', 'D']],
+                                            ['C', 'D','E']],
                                             figsize=(10,5))
                 for ax in axs.values():
                     ax.axis('off')
@@ -365,6 +370,7 @@ for category in ["Jacquard"] :
                 axs['B'].set_title('Query images')
                 axs['C'].set_title('Correspondences')
                 axs['D'].set_title('Reference object mask')
+                axs['E'].set_title('Point Transform Comparison')
                 fig.suptitle(f'Error: n/a', fontsize=6)
                 axs['A'].imshow(desc.denorm_torch_to_pil(ref_image[i]))
                 
@@ -380,8 +386,16 @@ for category in ["Jacquard"] :
                     if x1 < 0 : 
                         continue
                     radius2 = 2
-                    circ1 = plt.Circle((x1, y1), radius2, facecolor='blue', edgecolor='white')
                     axs['D'].scatter([y1],[x1])
+
+                axs['E'].imshow(desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]))
+                for q in range(out2.shape[0]):
+                    x1,y1 = out2[q][0]
+                    xpred, ypred = dst[0][q]
+                    radius2 = 2
+                    axs['E'].scatter([y1],[x1],color='green')
+                    axs['E'].scatter([ypred],[xpred],color='blue')
+                    
 
                 draw_correspondences_lines(all_points1[i], all_points2[i],
                                         desc.denorm_torch_to_pil(ref_image[i]),
