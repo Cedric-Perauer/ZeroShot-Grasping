@@ -64,6 +64,7 @@ class TestDataset(Dataset):
             if os.path.exists(store_dir) == True: 
                 shutil.rmtree(store_dir)
             os.makedirs(store_dir)
+            cur_dict['grasping_labels'] = []
             for idx,txt in enumerate(grasp_txts):
                 grasp = []
                 with open(txt,'r') as f:
@@ -74,9 +75,10 @@ class TestDataset(Dataset):
                         h = h.split('\n')[0]
                         x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
                         grasp.append([x,y,angle,w,h])
-                        grasps.append(grasp)
+                    grasps = self.create_grasp_rectangle(grasp)
+                    cur_dict['grasping_labels'].append(grasps)
                     if vis == True :
-                        self.visualize(imgs[idx],grasp,store_dir)
+                        self.visualize(imgs[idx],grasps,store_dir)
                         self.img_cnt += 1
             
                 
@@ -112,12 +114,9 @@ class TestDataset(Dataset):
             rotatedX = tempX*np.cos(theta) - tempY*np.sin(theta);
             rotatedY = tempX*np.sin(theta) + tempY*np.cos(theta);
         
-    
-    def visualize(self,img,grasp,store_dir):
-        #img = Image.open(img) 
-        img = cv2.imread(img)
-        #draw = ImageDraw.Draw(img)
+    def create_grasp_rectangle(self,grasp):
         mids = []
+        grasps = []
         for n,el in enumerate(grasp) : 
             x,y,angle,w,h = el
             if [x,y] in mids:
@@ -131,7 +130,17 @@ class TestDataset(Dataset):
             #tl,bl,tr,br = self.rotate_points((x,y),points,angle) 
             #print(len(points))
             square_vertices = [self.rotated_about(pt[0],pt[1], x, y, math.radians(angle)) for pt in points]      
-            br,tr,tl,bl = square_vertices
+            grasps.append(square_vertices)
+            #br,tr,tl,bl = square_vertices
+        return grasps
+    
+     
+    def visualize(self,img,grasp,store_dir):
+        #img = Image.open(img) 
+        img = cv2.imread(img)
+        #draw = ImageDraw.Draw(img)
+        for n,el in enumerate(grasp) : 
+            br,tr,tl,bl = el
             br = [int(i) for i in br]
             tr = [int(i) for i in tr]
             bl = [int(i) for i in bl]
@@ -167,6 +176,7 @@ class TestDataset(Dataset):
         target_imgs = self.items[index]['target_images_rgb']
         mask_ref = self.items[index]['ref_image_mask']
         mask_target = self.items[index]['target_images_masks']
+        grasps = self.items[index]['grasping_labels']
         
         img_ref = Image.open(img_ref) 
         img_ref = self.image_transform(img_ref)
@@ -174,9 +184,10 @@ class TestDataset(Dataset):
         mask_target = [self.transform_tensor(Image.open(i)) for i in mask_target]
         
         target_imgs = [self.image_transform(Image.open(i)) for i in target_imgs]
+        grasps = [torch.tensor(i) * 224/1024. for i in grasps]
         target_imgs = torch.stack(target_imgs)
 
-        return img_ref, target_imgs, mask_ref,mask_target
+        return img_ref, target_imgs, mask_ref,mask_target, grasps
         
         
         

@@ -10,6 +10,7 @@ from pytorch3d.ops import utils as oputil
 from pytorch3d.renderer.cameras import get_world_to_view_transform
 import torchvision 
 from PIL import Image
+from matplotlib.patches import Polygon
 import cv2
 
 # Descriptor extractor 
@@ -106,6 +107,21 @@ pose = ZeroShotPoseMethod(
     take_best_view=args.take_best_view,
 )
 
+def rotate_grasping_rectangle(grasp_points,H):
+    '''
+    inputs : 
+        H : homography matrix to transform the boxes to the new frame
+        grasp_points : array of all the grasp rectangles (4 each)
+        
+    '''
+    #import pdb; pdb.set_trace()
+    grasp_points = grasp_points.numpy().astype(np.float32).reshape(1,-1,2)
+    output = cv2.perspectiveTransform(grasp_points, H) 
+    output = output.reshape(-1,4,2)
+    
+    return output
+    
+
 plot_results = args.plot_results
 
 
@@ -183,7 +199,7 @@ for category in ["Jacquard"] :
         #img_ref = Image.open(img1_path)
         #img_target = Image.open(img2_path)
         
-        ref_image, all_target_images, mask_ref, mask_targets = batch 
+        ref_image, all_target_images, mask_ref, mask_targets, grasps = batch 
         batch_size = ref_image.size(0)
         all_images = torch.cat([ref_image.unsqueeze(1), all_target_images], dim=1).to(device) # B x (N_TGT + 1) x 3 x S x S
         # Extract features, attention maps, and cls_tokens
@@ -349,6 +365,7 @@ for category in ["Jacquard"] :
         matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
         # applying perspective algorithm
         dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
+        grasp_new = rotate_grasping_rectangle(grasps[0],matrix)
         
         if plot_results:
 
@@ -361,8 +378,8 @@ for category in ["Jacquard"] :
                 idx_plot += 1
                 save_name = os.path.join(fig_dir, save_name)
 
-                fig, axs = plt.subplot_mosaic([['A', 'B', 'B'],
-                                            ['C', 'D','E']],
+                fig, axs = plt.subplot_mosaic([['A', 'B', 'B','C'],
+                                            ['D','D','E','F']],
                                             figsize=(10,5))
                 for ax in axs.values():
                     ax.axis('off')
@@ -371,6 +388,7 @@ for category in ["Jacquard"] :
                 axs['C'].set_title('Correspondences')
                 axs['D'].set_title('Reference object mask')
                 axs['E'].set_title('Point Transform Comparison')
+                axs['F'].set_title('Transform of Grasps')
                 fig.suptitle(f'Error: n/a', fontsize=6)
                 axs['A'].imshow(desc.denorm_torch_to_pil(ref_image[i]))
                 
@@ -396,7 +414,35 @@ for category in ["Jacquard"] :
                     axs['E'].scatter([y1],[x1],color='green')
                     axs['E'].scatter([ypred],[xpred],color='blue')
                     
-
+                axs['F'].imshow(desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]))
+                for idx,grasp in enumerate(grasp_new):
+                    #x1,y1 = out2[q][0]
+                    #xpred, ypred = dst[0][q]
+                    bl,tl,tr,br = grasp
+                    gt_grasp = grasps[best_idxs[i]][0][idx].numpy()
+                    bl_gt, tl_gt,tr_gt, br_gt = gt_grasp
+                    #import pdb; pdb.set_trace()
+                    axs['F'].scatter([bl_gt[0]],[bl_gt[1]],color='green')
+                    axs['F'].scatter([tl_gt[0]],[tl_gt[1]],color='green')
+                    axs['F'].scatter([br_gt[0]],[br_gt[1]],color='green')
+                    axs['F'].scatter([tr_gt[0]],[tr_gt[1]],color='green')
+                    
+                    axs['F'].scatter([bl[0]],[bl[1]],color='blue')
+                    axs['F'].scatter([tl[0]],[tl[1]],color='blue')
+                    axs['F'].scatter([br[0]],[br[1]],color='blue')
+                    axs['F'].scatter([tr[0]],[tr[1]],color='blue')
+                    
+                    #points = np.array([bl,tl,tr,br])
+                    #points_gt = np.array([bl_gt,tl_gt,tr_gt,br_gt])
+                    #import pdb; pdb.set_trace()
+                    
+                    #p = Polygon(points_gt, facecolor = 'k')
+                    #axs['F'].add_patch(p)
+                    #break 
+                    #import pdb; pdb.set_trace()
+                    #axs['E'].scatter([y1],[x1],color='green')
+                    #axs['E'].scatter([ypred],[xpred],color='blue')
+                    
                 draw_correspondences_lines(all_points1[i], all_points2[i],
                                         desc.denorm_torch_to_pil(ref_image[i]),
                                         desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]),
