@@ -114,8 +114,7 @@ def rotate_grasping_rectangle(grasp_points,H):
         grasp_points : array of all the grasp rectangles (4 each)
         
     '''
-    #import pdb; pdb.set_trace()
-    grasp_points = grasp_points.numpy().astype(np.float32).reshape(1,-1,2)
+    grasp_points = grasp_points.astype(np.float32).reshape(1,-1,2)
     output = cv2.perspectiveTransform(grasp_points, H) 
     output = output.reshape(-1,4,2)
     
@@ -155,6 +154,11 @@ idx_plot = 0
 
 image_transform = desc.get_transform()
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True)
+dataset.img_cnt = 0 
+
+vis_dir = 'vis_out/'
+
+os.makedirs(vis_dir, exist_ok=True)
 
 for category in ["Jacquard"] :
     cat_log_dir, fig_dir = pose.make_log_dirs(log_dir, category)
@@ -199,7 +203,7 @@ for category in ["Jacquard"] :
         #img_ref = Image.open(img1_path)
         #img_target = Image.open(img2_path)
         
-        ref_image, all_target_images, mask_ref, mask_targets, grasps = batch 
+        ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path = batch 
         batch_size = ref_image.size(0)
         all_images = torch.cat([ref_image.unsqueeze(1), all_target_images], dim=1).to(device) # B x (N_TGT + 1) x 3 x S x S
         # Extract features, attention maps, and cls_tokens
@@ -365,8 +369,17 @@ for category in ["Jacquard"] :
         matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
         # applying perspective algorithm
         dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
-        grasp_new = rotate_grasping_rectangle(grasps[0],matrix)
+        grasp0 = grasps_ref[0][0].numpy().reshape(1,-1,2).astype(np.float32)
+        #import pdb; pdb.set_trace()
+        dst2 = cv2.perspectiveTransform(grasp0, matrix)
         
+        #switch x,y axes as this is the order in the correspondence points
+        grasps_new = grasps_ref.numpy().copy()
+        grasps_new[0][:,:,0] = grasps_ref[0][:,:,1]
+        grasps_new[0][:,:,1] = grasps_ref[0][:,:,0]
+        
+        grasp_new = rotate_grasping_rectangle(grasps_new,matrix)
+        #import pdb; pdb.set_trace() 
         if plot_results:
 
             # -----------------
@@ -403,23 +416,22 @@ for category in ["Jacquard"] :
                     x1,y1 = pts
                     if x1 < 0 : 
                         continue
-                    radius2 = 2
-                    axs['D'].scatter([y1],[x1])
+                    axs['D'].scatter([y1],[x1],s=1)
 
                 axs['E'].imshow(desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]))
                 for q in range(out2.shape[0]):
                     x1,y1 = out2[q][0]
                     xpred, ypred = dst[0][q]
-                    radius2 = 2
-                    axs['E'].scatter([y1],[x1],color='green')
-                    axs['E'].scatter([ypred],[xpred],color='blue')
+                    axs['E'].scatter([y1],[x1],color='green',s=1)
+                    axs['E'].scatter([ypred],[xpred],color='blue',s=1)
                     
                 axs['F'].imshow(desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]))
+                '''
                 for idx,grasp in enumerate(grasp_new):
                     #x1,y1 = out2[q][0]
                     #xpred, ypred = dst[0][q]
                     bl,tl,tr,br = grasp
-                    gt_grasp = grasps[best_idxs[i]][0][idx].numpy()
+                    gt_grasp = grasps_target[best_idxs[i]][0][idx].numpy()
                     bl_gt, tl_gt,tr_gt, br_gt = gt_grasp
                     #import pdb; pdb.set_trace()
                     axs['F'].scatter([bl_gt[0]],[bl_gt[1]],color='green')
@@ -431,17 +443,19 @@ for category in ["Jacquard"] :
                     axs['F'].scatter([tl[0]],[tl[1]],color='blue')
                     axs['F'].scatter([br[0]],[br[1]],color='blue')
                     axs['F'].scatter([tr[0]],[tr[1]],color='blue')
+                '''
+                dataset.visualize_imgs(target_path[best_idxs[i]],grasps_target[best_idxs[i]][0].numpy(),grasp_new,grasps_ref[0],ref_path,dst,store_dir=vis_dir)
                     
-                    #points = np.array([bl,tl,tr,br])
-                    #points_gt = np.array([bl_gt,tl_gt,tr_gt,br_gt])
-                    #import pdb; pdb.set_trace()
-                    
-                    #p = Polygon(points_gt, facecolor = 'k')
-                    #axs['F'].add_patch(p)
-                    #break 
-                    #import pdb; pdb.set_trace()
-                    #axs['E'].scatter([y1],[x1],color='green')
-                    #axs['E'].scatter([ypred],[xpred],color='blue')
+                #points = np.array([bl,tl,tr,br])
+                #points_gt = np.array([bl_gt,tl_gt,tr_gt,br_gt])
+                #import pdb; pdb.set_trace()
+                
+                #p = Polygon(points_gt, facecolor = 'k')
+                #axs['F'].add_patch(p)
+                #break 
+                #import pdb; pdb.set_trace()
+                #axs['E'].scatter([y1],[x1],color='green')
+                #axs['E'].scatter([ypred],[xpred],color='blue')
                     
                 draw_correspondences_lines(all_points1[i], all_points2[i],
                                         desc.denorm_torch_to_pil(ref_image[i]),

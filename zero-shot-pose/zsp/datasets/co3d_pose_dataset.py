@@ -57,6 +57,7 @@ class TestDataset(Dataset):
             grasp_txts = sorted(grasp_txts, key=lambda x: int(x.split('_')[0]))
             masks = [self.dataset_root + cat + "/" + i for i in masks]
             imgs = [self.dataset_root + cat + "/" + i for i in imgs]
+            img_paths = imgs.copy()
             grasp_txts = [self.dataset_root + cat + "/" + i for i in grasp_txts]
             grasps = []
             self.img_cnt = 0
@@ -64,7 +65,7 @@ class TestDataset(Dataset):
             if os.path.exists(store_dir) == True: 
                 shutil.rmtree(store_dir)
             os.makedirs(store_dir)
-            cur_dict['grasping_labels'] = []
+            grasping_labels = []
             for idx,txt in enumerate(grasp_txts):
                 grasp = []
                 with open(txt,'r') as f:
@@ -76,15 +77,18 @@ class TestDataset(Dataset):
                         x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
                         grasp.append([x,y,angle,w,h])
                     grasps = self.create_grasp_rectangle(grasp)
-                    cur_dict['grasping_labels'].append(grasps)
+                    grasping_labels.append(grasps)
                     if vis == True :
                         self.visualize(imgs[idx],grasps,store_dir)
                         self.img_cnt += 1
             
                 
-                
+            cur_dict['ref_img_path'] = img_paths[0]
+            cur_dict['target_img_path'] = img_paths[1:]
             cur_dict['ref_image_rgb'] = imgs[0]
             cur_dict['ref_image_mask'] = masks[0]
+            cur_dict['target_grasps'] = grasping_labels[1:]
+            cur_dict['ref_grasps'] = grasping_labels[0]
             up = num_targets + 1 if len(imgs) > num_targets else len(imgs) + 1
             cur_dict['target_images_masks'] = masks[1:up]
             cur_dict['target_images_rgb'] = imgs[1:up]
@@ -137,14 +141,20 @@ class TestDataset(Dataset):
      
     def visualize(self,img,grasp,store_dir):
         #img = Image.open(img) 
-        img = cv2.imread(img)
+        #import pdb; pdb.set_trace()
+        try :
+            img = cv2.imread(img)
+        except :
+            img = img[0]
+            img = cv2.imread(img)
         #draw = ImageDraw.Draw(img)
         for n,el in enumerate(grasp) : 
+            #import pdb; pdb.set_trace()
             br,tr,tl,bl = el
-            br = [int(i) for i in br]
-            tr = [int(i) for i in tr]
-            bl = [int(i) for i in bl]
-            tl = [int(i) for i in tl]
+            br = [int(i * 1024/224.) for i in br]
+            tr = [int(i * 1024/224.) for i in tr]
+            bl = [int(i * 1024/224.) for i in bl]
+            tl = [int(i * 1024/224.) for i in tl]
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))  
@@ -153,19 +163,88 @@ class TestDataset(Dataset):
             img = cv2.line(img,tr,br,color,thickness=2)
             img = cv2.line(img,br,bl,color,thickness=2)
             img = cv2.line(img,tr,tl,color,thickness=2)
-            #cv2.imshow('img',img)
-            #cv2.waitKey(0)
-            
-            #draw.polygon(square_vertices, outline=(0,0,0))
-            
-            
-            
-            rad = 5
-            #draw.ellipse((x-rad, y -rad, x + rad, y + rad), fill=(255, 0, 0), outline=(0, 0, 0))
-        
         
         cv2.imwrite(store_dir + str(self.img_cnt) + '.png',img)
+        self.img_cnt += 1
             
+    def visualize_imgs(self,img,grasp,grasp_transformed,grasp_ref,img_ref,dst,store_dir):
+        #img = Image.open(img) 
+        #import pdb; pdb.set_trace()
+        try :
+            img = cv2.imread(img)
+        except :
+            img = img[0]
+            img = cv2.imread(img)
+        img2 = img.copy()
+        try : 
+            img3 = cv2.imread(img_ref)
+        except:
+            img3 = cv2.imread(img_ref[0])
+        #draw = ImageDraw.Draw(img)
+        for n,el in enumerate(grasp) : 
+            #import pdb; pdb.set_trace()
+            br,tr,tl,bl = el
+            br = [int(i * 1024/224.) for i in br]
+            tr = [int(i * 1024/224.) for i in tr]
+            bl = [int(i * 1024/224.) for i in bl]
+            tl = [int(i * 1024/224.) for i in tl]
+            
+            #print(len(square_vertices))    
+            color1 = (list(np.random.choice(range(256), size=3)))  
+            color =[int(color1[0]), int(color1[1]), int(color1[2])]  
+            img = cv2.line(img,tl,bl,color,thickness=2)
+            img = cv2.line(img,tr,br,color,thickness=2)
+            img = cv2.line(img,br,bl,color,thickness=2)
+            img = cv2.line(img,tr,tl,color,thickness=2)
+        
+        cv2.imwrite(store_dir + str(self.img_cnt) + 'gt.png',img)
+        
+        for n,el in enumerate(grasp_transformed) : 
+            #import pdb; pdb.set_trace()
+            br,tr,tl,bl = el
+            br = [int(i * 1024/224.) for i in br]
+            tr = [int(i * 1024/224.) for i in tr]
+            bl = [int(i * 1024/224.) for i in bl]
+            tl = [int(i * 1024/224.) for i in tl]
+            
+            #print(len(square_vertices))    
+            color1 = (list(np.random.choice(range(256), size=3)))  
+            color =[int(color1[0]), int(color1[1]), int(color1[2])]  
+            img2 = cv2.line(img2,tl,bl,color,thickness=2)
+            img2 = cv2.line(img2,tr,br,color,thickness=2)
+            img2 = cv2.line(img2,br,bl,color,thickness=2)
+            img2 = cv2.line(img2,tr,tl,color,thickness=2)
+            img2 = cv2.circle(img2,(br[1],br[0]), 2, (255,0,0), -1)
+        
+        for pred in dst[0]:
+            x,y = pred
+            img2 = cv2.circle(img2,(int(y * 1024/224.),int(x * 1024/224)), 2, (0,0,255), -1)
+        
+        
+        cv2.imwrite(store_dir + str(self.img_cnt) + '_transformed.png',img2)
+        
+        for n,el in enumerate(grasp_ref) : 
+            #import pdb; pdb.set_trace()
+            br,tr,tl,bl = el
+            br = [int(i * 1024/224.) for i in br]
+            tr = [int(i * 1024/224.) for i in tr]
+            bl = [int(i * 1024/224.) for i in bl]
+            tl = [int(i * 1024/224.) for i in tl]
+            
+            #print(len(square_vertices))    
+            color1 = (list(np.random.choice(range(256), size=3)))  
+            color =[int(color1[0]), int(color1[1]), int(color1[2])]  
+            img3 = cv2.line(img3,tl,bl,color,thickness=2)
+            img3 = cv2.line(img3,tr,br,color,thickness=2)
+            img3 = cv2.line(img3,br,bl,color,thickness=2)
+            img3 = cv2.line(img3,tr,tl,color,thickness=2)
+        
+        
+        cv2.imwrite(store_dir + str(self.img_cnt) + 'ref.png',img3)
+        
+        self.img_cnt += 1 
+
+        
         
     
     def __len__(self):
@@ -176,7 +255,10 @@ class TestDataset(Dataset):
         target_imgs = self.items[index]['target_images_rgb']
         mask_ref = self.items[index]['ref_image_mask']
         mask_target = self.items[index]['target_images_masks']
-        grasps = self.items[index]['grasping_labels']
+        grasps_target = self.items[index]['target_grasps']
+        grasps_ref = self.items[index]['ref_grasps']
+        ref_path = self.items[index]['ref_img_path']
+        target_path = self.items[index]['target_img_path']
         
         img_ref = Image.open(img_ref) 
         img_ref = self.image_transform(img_ref)
@@ -184,10 +266,11 @@ class TestDataset(Dataset):
         mask_target = [self.transform_tensor(Image.open(i)) for i in mask_target]
         
         target_imgs = [self.image_transform(Image.open(i)) for i in target_imgs]
-        grasps = [torch.tensor(i) * 224/1024. for i in grasps]
+        grasps_target = [torch.tensor(i) * 224/1024. for i in grasps_target]
+        grasps_ref = torch.tensor(grasps_ref) * 224/1024.
         target_imgs = torch.stack(target_imgs)
 
-        return img_ref, target_imgs, mask_ref,mask_target, grasps
+        return img_ref, target_imgs, mask_ref,mask_target, grasps_ref,grasps_target, ref_path, target_path
         
         
         
