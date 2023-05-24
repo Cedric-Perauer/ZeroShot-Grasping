@@ -207,7 +207,11 @@ class TestDataset(Dataset):
             bl = [int(i * 1024/224.) for i in bl]
             tl = [int(i * 1024/224.) for i in tl]
             
-            #print(len(square_vertices))    
+            br = [br[1],br[0]]
+            tr = [tr[1],tr[0]]
+            bl = [bl[1],bl[0]] 
+            tl = [tl[1],tl[0]]
+
             color1 = (list(np.random.choice(range(256), size=3)))  
             color =[int(color1[0]), int(color1[1]), int(color1[2])]  
             img2 = cv2.line(img2,tl,bl,color,thickness=2)
@@ -243,6 +247,7 @@ class TestDataset(Dataset):
         cv2.imwrite(store_dir + str(self.img_cnt) + 'ref.png',img3)
         
         self.img_cnt += 1 
+
 
         
         

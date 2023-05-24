@@ -379,7 +379,7 @@ for category in ["Jacquard"] :
         grasps_new[0][:,:,1] = grasps_ref[0][:,:,0]
         
         grasp_new = rotate_grasping_rectangle(grasps_new,matrix)
-        #import pdb; pdb.set_trace() 
+        
         if plot_results:
 
             # -----------------
