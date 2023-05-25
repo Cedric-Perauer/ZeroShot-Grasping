@@ -189,21 +189,14 @@ for category in ["Jacquard"] :
             'acc_30': AverageMeter(),
         }
     for batch_idx, batch in enumerate(tqdm(dataloader)):
-        #images, transforms3d, meta, uq_idx = batch
-        #ref_image, all_target_images = images
-        #ref_transform, target_transform = transforms3d
-        #ref_meta_data, target_meta_data = meta
-        # ---------------
-        # GET FEATURES
-        # ---------------
-        # Ref images shape: B x 3 x S x S (S = size, assumed square images)
-        # Target images shape: B x N_TGT x 3 x S x S
-        #img1_path = os.path.expanduser("~") + "/zero-shot-pose/images/0.png"
-        #img2_path = os.path.expanduser("~") + "/zero-shot-pose/images/1.png"
-        #img_ref = Image.open(img1_path)
-        #img_target = Image.open(img2_path)
+
+        ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
+            target_raw_labels, ref_raw_labels = batch 
         
-        ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path = batch 
+        #extract x,y centers of the grasping boxes
+        centers_ref  = ref_raw_labels[:][:,:,0:2]
+        centers_targets = [i[:,:,0:2] for i in target_raw_labels]
+
         batch_size = ref_image.size(0)
         all_images = torch.cat([ref_image.unsqueeze(1), all_target_images], dim=1).to(device) # B x (N_TGT + 1) x 3 x S x S
         # Extract features, attention maps, and cls_tokens
@@ -236,17 +229,7 @@ for category in ["Jacquard"] :
         
         new_arr_1 = []
         new_arr_2 = []
-        
-        #remove all the points that are outside the mask
-        
-        #cur1.append(pts)
-        #pts2 = selected_points_image_2[i,j]
-        #cur2.append(pts2)
-        #import pdb; pdb.set_trace()
-        #filter the points that are outside the mask 
-        
-        
-        
+
         #  sim_selected_12 has shape 10x50
         # ----------------
         # FIND BEST IMAGE IN TARGET SEQ
@@ -268,20 +251,7 @@ for category in ["Jacquard"] :
             # -----------------
             # Get other data required to compute pose offset
             target_frame = best_idxs[i]
-            #cls = dataset.samples[uq_idx[i]]['class']
-            '''
-            ref_scaling = ref_meta_data['scalings'][i]
-            ref_depth = ref_meta_data['depth_maps'][i]
-            ref_camera = ref_meta_data['cameras'][i]
-            ref_pcd = ref_meta_data['pcd'][i]
-            ref_trans = ref_transform[i]
 
-            target_scaling = target_meta_data['scalings'][i][target_frame]
-            target_depth = target_meta_data['depth_maps'][i][target_frame]
-            target_camera = target_meta_data['cameras'][i][target_frame]
-            target_pcd = target_meta_data['pcd'][i]
-            target_trans = target_transform[i]
-            '''
             # NB: from here on, '1' <--> ref and '2' <--> target
             # Get points and if necessary scale them from patch to pixel space
             points1, points2 = (
@@ -293,63 +263,7 @@ for category in ["Jacquard"] :
             )
             all_points1.append(points1_rescaled.clone().int().long())
             all_points2.append(points2_rescaled.clone().int().long())
-            # Now rescale to the *original* image pixel size, i.e. prior to resizing crop to square
-            #points1_rescaled, points2_rescaled = (scale_points_to_orig(p, s) for p, s in zip(
-            #    (points1_rescaled, points2_rescaled), (ref_scaling, target_scaling)
-            #))
-            # --- If "take best view", simply return identity transform estimate ---
-            #if pose.take_best_view:
-            #    trans21 = get_world_to_view_transform()
-            # --- Otherwise, compute transform based on 3D point correspondences ---
-            #else:
-            #    frame1 = {
-            #        'shape': ref_depth.shape[1:],
-            #        'scaling': ref_scaling,
-            #        'depth_map': ref_depth,
-            #        'camera': ref_camera
-            #    }
-
-            #    frame2 = {
-            #        'shape': target_depth.shape[1:],
-            #        'scaling': target_scaling,
-            #        'depth_map': target_depth,
-            #        'camera': target_camera
-            #    }
-
-            #    struct_pcd1 = get_structured_pcd(frame1, world_coordinates=False)
-            #    struct_pcd2 = get_structured_pcd(frame2, world_coordinates=False)
-
-            #    world_corr1 = struct_pcd1[points1_rescaled[:, 0], points1_rescaled[:, 1]].numpy()
-            #    world_corr2 = struct_pcd2[points2_rescaled[:, 0], points2_rescaled[:, 1]].numpy()
-
-                # -----------------
-                # COMPUTE RELATIVE OFFSET
-                # -----------------
-            #    trans21 = pose.solve_umeyama_ransac(world_corr1, world_corr2)
-            #all_trans21.append(trans21)
-            # -----------------
-            # EVALUATE
-            # -----------------
-            #rotation_err = trans21_error(trans21, trans1_gt=ref_trans, trans2_gt=target_trans,
-            #                            cam1=ref_camera, cam2=target_camera)
-            #f = open(os.path.join(cat_log_dir, f"{args.best_frame_mode}_results.txt"), "a")
-            #f.write(f"Error: {rotation_err[0]}\n")
-            #f.close()
-
-            #print(rotation_err[0].numpy())
-            #
-            #acc_30 = 1 if rotation_err < 30 else 0
-            #all_errs.append(rotation_err[0])
-            #loggers[cls]['rot_error'].update(rotation_err, 1)
-            #loggers[cls]['acc_30'].update(acc_30, 1)
-
-            #if args.also_take_best_view:
-            #    trans21 = get_world_to_view_transform()
-            #    rotation_err = trans21_error(trans21, trans1_gt=ref_trans, trans2_gt=target_trans,
-            #                                cam1=ref_camera, cam2=target_camera)
-            #    f = open(os.path.join(cat_log_dir, f"{args.best_frame_mode}_bestview.txt"), "a")
-            #    f.write(f"Error: {rotation_err[0]}\n")
-            #    f.close()
+        
         for i in range(len(all_points1)):
                     for j,pts in enumerate(all_points1[i]) :
                             x,y = pts
@@ -359,7 +273,8 @@ for category in ["Jacquard"] :
                             if mask_value.item() == 0 :
                                 #import pdb; pdb.set_trace()        
                                 #set correspondences that are outside of the object area to 0 
-                                # right now : ref mask is used, should be changed to query mask later
+                                # right now : ref mask is used, could be changed to query mask later 
+                                # (unless we have segmentation for unknown object)
                                 all_points1[i][j] = torch.Tensor([-1,-1])
                                 all_points2[i][j] = torch.Tensor([-1,-1])
         
@@ -369,9 +284,6 @@ for category in ["Jacquard"] :
         matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
         # applying perspective algorithm
         dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
-        grasp0 = grasps_ref[0][0].numpy().reshape(1,-1,2).astype(np.float32)
-        #import pdb; pdb.set_trace()
-        dst2 = cv2.perspectiveTransform(grasp0, matrix)
         
         #switch x,y axes as this is the order in the correspondence points
         grasps_new = grasps_ref.numpy().copy()
@@ -379,6 +291,18 @@ for category in ["Jacquard"] :
         grasps_new[0][:,:,1] = grasps_ref[0][:,:,0]
         
         grasp_new = rotate_grasping_rectangle(grasps_new,matrix)
+        
+        #transform grasp center to the new frame 
+        centers_targets = centers_targets[best_idxs[0]].numpy().astype(np.float32).reshape(-1,1,2)
+        centers_ref = centers_ref.numpy().astype(np.float32).reshape(-1,1,2)
+        
+        centers_new = centers_ref.copy()
+        centers_new[:,:,0] = centers_ref[:,:,1]
+        centers_new[:,:,1] = centers_ref[:,:,0]
+        centers_new = cv2.perspectiveTransform(centers_new, matrix)
+        
+        
+        
         
         if plot_results:
 
@@ -412,11 +336,18 @@ for category in ["Jacquard"] :
                 axs['B'].imshow(tgt_pils)
                 print(desc.torch_to_pil(mask_ref[0]).shape)
                 axs['D'].imshow(desc.torch_to_pil(mask_ref[0]),cmap='Greys_r')
+                idcs = (mask_ref[0] != 0).nonzero(as_tuple=False)[:,1:3]
+                max_x,min_x,max_y,min_y = idcs[:,0].max(),idcs[:,0].min(),idcs[:,1].max(),idcs[:,1].min()
+                axs['D'].scatter([min_y],[min_x],color='cyan',s=3)
+                axs['D'].scatter([max_y],[max_x],color='cyan',s=3)
+                axs['D'].scatter([min_y],[max_x],color='cyan',s=3)
+                axs['D'].scatter([max_y],[min_x],color='cyan',s=3)
+                
                 for pts in all_points1[i]:
                     x1,y1 = pts
                     if x1 < 0 : 
                         continue
-                    axs['D'].scatter([y1],[x1],s=1)
+                    axs['D'].scatter([y1],[x1],color='blue',s=1)
 
                 axs['E'].imshow(desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]))
                 for q in range(out2.shape[0]):
@@ -444,7 +375,8 @@ for category in ["Jacquard"] :
                     axs['F'].scatter([br[0]],[br[1]],color='blue')
                     axs['F'].scatter([tr[0]],[tr[1]],color='blue')
                 '''
-                dataset.visualize_imgs(target_path[best_idxs[i]],grasps_target[best_idxs[i]][0].numpy(),grasp_new,grasps_ref[0],ref_path,dst,store_dir=vis_dir)
+                dataset.visualize_imgs(target_path[best_idxs[i]],grasps_target[best_idxs[i]][0].numpy(),
+                                       grasp_new,grasps_ref[0],ref_path,dst,centers_new,store_dir=vis_dir)
                     
                 #points = np.array([bl,tl,tr,br])
                 #points_gt = np.array([bl_gt,tl_gt,tr_gt,br_gt])
