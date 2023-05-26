@@ -153,7 +153,7 @@ categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handb
 idx_plot = 0
 
 image_transform = desc.get_transform()
-dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True)
+dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=True)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'
@@ -191,7 +191,8 @@ for category in ["Jacquard"] :
     for batch_idx, batch in enumerate(tqdm(dataloader)):
 
         ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
-            target_raw_labels, ref_raw_labels = batch 
+            target_raw_labels, ref_raw_labels = batch
+
         
         #extract x,y centers of the grasping boxes
         centers_ref  = ref_raw_labels[:][:,:,0:2]

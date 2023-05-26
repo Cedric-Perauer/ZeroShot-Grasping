@@ -33,11 +33,13 @@ class TestDataset(Dataset):
                  num_targets=1,vis=False,crop=True):
         self.dataset_root = dataset_root
         self.crop = crop
+        self.border_size = 20
         self.image_transform = image_transform
         self.img_vis_dir = 'labels_vis/'
         self.classes = os.listdir(dataset_root)
         #if self.img_vis_dir[:-1] in self.classes : 
         #    self.classes.remove(self.img_vis_dir[:-1])
+        self.image_dims = []
         self.items = []
         self.transform_tensor = transforms.Compose([transforms.Resize((224,224)),
                                                     transforms.ToTensor()])
@@ -78,29 +80,55 @@ class TestDataset(Dataset):
                         h = h.split('\n')[0]
                         x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
                         grasp.append([x,y,angle,w,h])
-                    grasps, raw_labels = self.create_grasp_rectangle(grasp)
-                    grasping_labels.append(grasps)
-                    raw_grasp_labels.append(raw_labels) 
-                    if vis == True :
-                        self.visualize(imgs[idx],grasps,store_dir)
-                        self.img_cnt += 1
+                    
+                    raw_grasp_labels.append(grasp)
+                    if self.crop == False:
+                        grasps, raw_labels = self.create_grasp_rectangle(grasp)
+                        grasping_labels.append(grasps)
+                    
+                        
+            image_dict = {} #store the image dimensions for cropping
+            image_dict['dims'] = []
             
             ## crop the images to only the are where the object is present plus some boarder area
             if self.crop :
-                ## for reference mask 
-                mask_ref = self.transform_tensor(Image.open(masks[0]))
-                idcs = (mask_ref != 0).nonzero(as_tuple=False)[:,1:3]
-                max_y,min_y,max_x,min_x = idcs[:,0].max(),idcs[:,0].min(),idcs[:,1].max(),idcs[:,1].min()
-                cur_dict['ref_crop'] = [min_x,min_x,max_x,max_y]
                 
                 ## for target masks
-                cur_dict['target_crops'] = []
-                for i in range(1,len(masks)):
+                cur_dict['crop_target'] = []
+                for i in range(0,len(masks)):
                     mask_ref = self.transform_tensor(Image.open(masks[i]))
                     idcs = (mask_ref != 0).nonzero(as_tuple=False)[:,1:3]
-                    max_y,min_y,max_x,min_x = idcs[:,0].max(),idcs[:,0].min(),idcs[:,1].max(),idcs[:,1].min()
-                    cur_dict['target_crops'].append([min_x,min_y,max_x,max_y])
-                    
+                    max_y,min_y,max_x,min_x = idcs[:,0].max()* 1024/224.,idcs[:,0].min()* 1024/224.,idcs[:,1].max()* 1024/224.,idcs[:,1].min()* 1024/224.
+                    if i >= 1:
+                        cur_dict['crop_target'].append([min_x,min_y,max_x,max_y])
+                        image_dict['dims'].append([min_x,max_x,min_y,max_y])
+                    else :
+                        cur_dict['crop_ref'] = [min_x,min_y,max_x,max_y]
+                        image_dict['dims'].append([min_x,max_x,min_y,max_y])
+                        
+                    for idx in range(len(raw_grasp_labels[i])):
+                        raw_grasp_labels[i][idx][0] = (raw_grasp_labels[i][idx][0] - (min_x) + self.border_size) * 224/(max_x-min_x + 2 * self.border_size)
+                        raw_grasp_labels[i][idx][1] = (raw_grasp_labels[i][idx][1] -  (min_y) + self.border_size) * 224/(max_y - min_y + self.border_size * 2)
+                        
+                    grasps, raw_labels = self.create_grasp_rectangle(raw_grasp_labels[i])
+                    grasping_labels.append(grasps)
+                            
+            grasp_labels_vis = raw_grasp_labels.copy()
+            if vis == True :
+                    for idx,_ in enumerate(grasp_txts):
+                        
+                        ##rescale midpoint for plot on original image
+                        if self.crop:
+                            for ix in range(len(grasp_labels_vis[idx])):
+                                grasp_labels_vis[idx][ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
+                                grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
+                                
+                        grasp_vis, _ = self.create_grasp_rectangle(grasp_labels_vis[idx])
+                        if self.crop : 
+                            self.visualize(imgs[idx],grasp_vis,store_dir,image_dict['dims'][idx])
+                        else : 
+                            self.visualize(imgs[idx],grasp_vis,store_dir)
+                        self.img_cnt += 1
             
                 
             cur_dict['ref_img_path'] = img_paths[0]
@@ -125,10 +153,18 @@ class TestDataset(Dataset):
     def rotated_about(self,ax, ay, bx, by, angle):
         radius = self.distance(ax,ay,bx,by)
         angle += math.atan2(ay-by, ax-bx)
-        return (
-            round(bx + radius * math.cos(angle)),
-            round(by + radius * math.sin(angle))
-        )
+        
+        #import pdb; pdb.set_trace()
+        if self.crop :
+            return [
+                round(bx.item() + radius * math.cos(angle)),
+                round(by.item() + radius * math.sin(angle))
+            ]
+        else : 
+            return [
+                round(bx + radius * math.cos(angle)),
+                round(by + radius * math.sin(angle))
+            ]
             
     def rotate_points(self,center,points,theta):
         pts_new = []
@@ -146,6 +182,7 @@ class TestDataset(Dataset):
         grasps = []
         centers = []
         for n,el in enumerate(grasp) : 
+            #import pdb; pdb.set_trace()
             x,y,angle,w,h = el
             if [x,y] in mids:
                 continue
@@ -164,7 +201,7 @@ class TestDataset(Dataset):
         return grasps, centers
     
      
-    def visualize(self,img,grasp,store_dir):
+    def visualize(self,img,grasp,store_dir,dims=None):
         #img = Image.open(img) 
         #import pdb; pdb.set_trace()
         try :
@@ -172,18 +209,21 @@ class TestDataset(Dataset):
         except :
             img = img[0]
             img = cv2.imread(img)
+            
+        if self.crop : 
+            #import pdb; pdb.set_trace()
+            img = img[int(dims[2]) -self.border_size:int(dims[3]) + self.border_size,int(dims[0]) - self.border_size:int(dims[1]) + self.border_size,:]
         #draw = ImageDraw.Draw(img)
         for n,el in enumerate(grasp) : 
-            #import pdb; pdb.set_trace()
             br,tr,tl,bl = el
-            br = [int(i * 1024/224.) for i in br]
-            tr = [int(i * 1024/224.) for i in tr]
-            bl = [int(i * 1024/224.) for i in bl]
-            tl = [int(i * 1024/224.) for i in tl]
+            #br[0],br[1] = int(br[0] * w/224.),int(br[1] * h /224.)
+            #bl[0],bl[1] = int(bl[0] * w/224.),int(bl[1] * h /224.)
+            #tl[0],tl[1] = int(tl[0] * w/224.),int(tl[1] * h /224.)
+            #tr[0],tr[1] = int(tr[0] * w/224.),int(tr[1] * h /224.)
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))  
-            color =[int(color1[0]), int(color1[1]), int(color1[2])]  
+            color =  [int(color1[0]), int(color1[1]), int(color1[2])]  
             img = cv2.line(img,tl,bl,color,thickness=2)
             img = cv2.line(img,tr,br,color,thickness=2)
             img = cv2.line(img,br,bl,color,thickness=2)
@@ -209,10 +249,10 @@ class TestDataset(Dataset):
         for n,el in enumerate(grasp) : 
             #import pdb; pdb.set_trace()
             br,tr,tl,bl = el
-            br = [int(i * 1024/224.) for i in br]
-            tr = [int(i * 1024/224.) for i in tr]
-            bl = [int(i * 1024/224.) for i in bl]
-            tl = [int(i * 1024/224.) for i in tl]
+            #br = [int(i * 1024/224.) for i in br]
+            #tr = [int(i * 1024/224.) for i in tr]
+            #bl = [int(i * 1024/224.) for i in bl]
+            #tl = [int(i * 1024/224.) for i in tl]
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))  
@@ -227,10 +267,10 @@ class TestDataset(Dataset):
         for n,el in enumerate(grasp_transformed) : 
             #import pdb; pdb.set_trace()
             br,tr,tl,bl = el
-            br = [int(i * 1024/224.) for i in br]
-            tr = [int(i * 1024/224.) for i in tr]
-            bl = [int(i * 1024/224.) for i in bl]
-            tl = [int(i * 1024/224.) for i in tl]
+            #br = [int(i * 1024/224.) for i in br]
+            #tr = [int(i * 1024/224.) for i in tr]
+            #bl = [int(i * 1024/224.) for i in bl]
+            #tl = [int(i * 1024/224.) for i in tl]
             
             br = [br[1],br[0]]
             tr = [tr[1],tr[0]]
@@ -277,9 +317,6 @@ class TestDataset(Dataset):
         
         self.img_cnt += 1 
 
-
-        
-        
     
     def __len__(self):
         return len(self.items)
@@ -303,41 +340,50 @@ class TestDataset(Dataset):
 
         img_ref = Image.open(img_ref) 
         mask_ref = Image.open(mask_ref)
-        border_size = 10
         if self.crop :
             left,top,right,bottom = crop_ref
-            left = left - border_size
-            top = top - border_size 
-            right = right + border_size
-            bottom = bottom + border_size
-            img_ref = img_ref.crop((left, top, right, bottom))
-            mask_ref = mask_ref.crop((left, top, right, bottom))
+            left = left - self.border_size
+            top = top - self.border_size 
+            right = right + self.border_size
+            bottom = bottom + self.border_size
+            img_ref = img_ref.crop((left.item(), top.item(), right.item(), bottom.item()))
+            #img_ref = img_ref.crop((top.item(), left.item(), bottom.item(), right.item()))
+            mask_ref = mask_ref.crop((left.item(), top.item(), right.item(), bottom.item()))
+            #mask_ref = mask_ref.crop((top.item(), left.item(), bottom.item(), right.item()))
         
         img_ref = self.image_transform(img_ref)
         mask_ref = self.transform_tensor(mask_ref)
-        mask_target = [Image.open(i) for i in mask_target]
-        target_imgs = [Image.open(i) for i in target_imgs]
+        mask_targets = [Image.open(i) for i in mask_target]
+        target_imgss = [Image.open(i) for i in target_imgs]
         if self.crop :
             mask_target, target_imgs = [],[]
-            for i in range(len(mask_target)):
+            for i in range(len(mask_targets)):
                 left,top,right,bottom = crop_target[i]
-                left = left - border_size
-                top = top - border_size 
-                right = right + border_size
-                bottom = bottom + border_size
-                mask_crop = mask_target[i].crop((left, top, right, bottom))
-                img_crop = target_imgs[i].crop((left, top, right, bottom))
+                left = left - self.border_size
+                top = top - self.border_size 
+                right = right + self.border_size
+                bottom = bottom + self.border_size
+                mask_crop = mask_targets[i]
+                img_crop = target_imgss[i]
+                mask_crop = mask_targets[i].crop((left.item(), top.item(), right.item(), bottom.item()))
+                img_crop = target_imgss[i].crop((left.item(),  top.item(), right.item(), bottom.item()))
                 mask_target.append(self.transform_tensor(mask_crop))
                 target_imgs.append(self.image_transform(img_crop))
-                
+             
         else : 
-            mask_target = [self.transform_tensor(i) for i in mask_target]
-            target_imgs = [self.image_transform(i) for i in target_imgs]
+            mask_target = [self.transform_tensor(i) for i in mask_targets]
+            target_imgs = [self.image_transform(i) for i in target_imgss]
         
-        target_raw_labels = [torch.tensor(i) * 224/1024 for i in target_raw_labels]
-        grasps_target = [torch.tensor(i) * 224/1024. for i in grasps_target]
-        ref_raw_labels = torch.tensor(ref_raw_labels) * 224/1024.
-        grasps_ref = torch.tensor(grasps_ref) * 224/1024.
+        target_raw_labels = [torch.tensor(i) for i in target_raw_labels]
+        grasps_target = [torch.tensor(i) for i in grasps_target]
+        ref_raw_labels = torch.tensor(ref_raw_labels) 
+        grasps_ref = torch.tensor(grasps_ref) 
+        if self.crop == False :
+            target_raw_labels = [i * 224/1024 for i in target_raw_labels]
+            grasps_target = [i * 224/1024 for i in grasps_target]
+            ref_raw_labels = ref_raw_labels * 224/1024
+            grasps_ref = grasps_ref * 224/1024
+            
         target_imgs = torch.stack(target_imgs)
 
         return img_ref, target_imgs, mask_ref,mask_target, grasps_ref,grasps_target, \
