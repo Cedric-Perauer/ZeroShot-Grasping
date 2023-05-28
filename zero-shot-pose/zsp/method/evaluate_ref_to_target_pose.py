@@ -153,7 +153,8 @@ categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handb
 idx_plot = 0
 
 image_transform = desc.get_transform()
-dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=True)
+CROP = False
+dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=False,crop=CROP)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'
@@ -180,7 +181,7 @@ for category in ["Jacquard"] :
     #dataloader = DataLoader(dataset, num_workers=args.num_workers,
     #                        batch_size=args.batch_size, collate_fn=co3d_pose_dataset_collate, shuffle=False)
     
-    dataloader = DataLoader(dataset, batch_size = args.batch_size,num_workers=args.num_workers,shuffle=False)
+    dataloader = DataLoader(dataset, batch_size = args.batch_size,num_workers=0,shuffle=False)
     categories = dataset.classes
     loggers = {}
     for c in categories:
@@ -189,10 +190,13 @@ for category in ["Jacquard"] :
             'acc_30': AverageMeter(),
         }
     for batch_idx, batch in enumerate(tqdm(dataloader)):
-
-        ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
-            target_raw_labels, ref_raw_labels = batch
-
+        
+        if CROP : 
+            ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
+                target_raw_labels, ref_raw_labels, ref_dims, target_dims, ref_gripper_pts, target_gripper_pts = batch
+        else : 
+            ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
+                target_raw_labels, ref_raw_labels,  ref_gripper_pts, target_gripper_pts = batch
         
         #extract x,y centers of the grasping boxes
         centers_ref  = ref_raw_labels[:][:,:,0:2]
@@ -286,11 +290,18 @@ for category in ["Jacquard"] :
         # applying perspective algorithm
         dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
         
+        ## the two grasping points
+        ref_pts = torch.Tensor(ref_gripper_pts)
+        ref_pts = ref_pts.numpy().reshape(1,-1,2).astype(np.float32)
+        ref_pts[:,:,0], ref_pts[:,:,1] = ref_pts[:,:,1].copy(), ref_pts[:,:,0].copy()
+        new_pts = cv2.perspectiveTransform(ref_pts, matrix).reshape(-1,2,2)
+        
         #switch x,y axes as this is the order in the correspondence points
         grasps_new = grasps_ref.numpy().copy()
         grasps_new[0][:,:,0] = grasps_ref[0][:,:,1]
         grasps_new[0][:,:,1] = grasps_ref[0][:,:,0]
         
+        #import pdb; pdb.set_trace()
         grasp_new = rotate_grasping_rectangle(grasps_new,matrix)
         
         #transform grasp center to the new frame 
@@ -376,9 +387,15 @@ for category in ["Jacquard"] :
                     axs['F'].scatter([br[0]],[br[1]],color='blue')
                     axs['F'].scatter([tr[0]],[tr[1]],color='blue')
                 '''
-                dataset.visualize_imgs(target_path[best_idxs[i]],grasps_target[best_idxs[i]][0].numpy(),
-                                       grasp_new,grasps_ref[0],ref_path,dst,centers_new,store_dir=vis_dir)
-                    
+                if CROP : 
+                    dataset.visualize_imgs(target_path[best_idxs[i]][0],target_raw_labels[best_idxs[i]],
+                                        grasp_new,grasps_ref[0],ref_path,dst,centers_new,
+                                        new_pts,store_dir=vis_dir,dims=target_dims[best_idxs[i]])
+                else : 
+                    dataset.visualize_imgs(target_path[best_idxs[i]][0],target_raw_labels[best_idxs[i]],
+                                        grasp_new,grasps_ref[0],ref_path,dst,centers_new,
+                                        new_pts,store_dir=vis_dir)
+                        
                 #points = np.array([bl,tl,tr,br])
                 #points_gt = np.array([bl_gt,tl_gt,tr_gt,br_gt])
                 #import pdb; pdb.set_trace()

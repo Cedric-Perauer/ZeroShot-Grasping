@@ -47,6 +47,7 @@ class TestDataset(Dataset):
             if os.path.isdir(self.dataset_root + cat) == False:
                 continue
             cur_dict = {}
+            out_grasps = []
             fs = os.listdir(self.dataset_root + cat)
             
             imgs = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.jpg') or i.endswith('.png')]
@@ -70,6 +71,7 @@ class TestDataset(Dataset):
             os.makedirs(store_dir)
             grasping_labels = []
             raw_grasp_labels = []
+            gripper_labels = [] 
             for idx,txt in enumerate(grasp_txts):
                 grasp = []
                 with open(txt,'r') as f:
@@ -79,17 +81,19 @@ class TestDataset(Dataset):
                         x,y,angle,w,h = split 
                         h = h.split('\n')[0]
                         x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
-                        grasp.append([x,y,angle,w,h])
+                        grasp.append([x * 224/1024.,y * 224/1024.,angle,w * 224/1024,h * 224/1024])
                     
                     raw_grasp_labels.append(grasp)
                     if self.crop == False:
-                        grasps, raw_labels = self.create_grasp_rectangle(grasp)
+                        grasps, raw_labels, gripper_points = self.create_grasp_rectangle(grasp)
                         grasping_labels.append(grasps)
+                        gripper_labels.append(gripper_points)
+                        out_grasps.append(grasp)
+                
                     
                         
             image_dict = {} #store the image dimensions for cropping
             image_dict['dims'] = []
-            
             ## crop the images to only the are where the object is present plus some boarder area
             if self.crop :
                 
@@ -105,12 +109,22 @@ class TestDataset(Dataset):
                     else :
                         cur_dict['crop_ref'] = [min_x,min_y,max_x,max_y]
                         image_dict['dims'].append([min_x,max_x,min_y,max_y])
-                        
+                    
+                    outs = []
                     for idx in range(len(raw_grasp_labels[i])):
-                        raw_grasp_labels[i][idx][0] = (raw_grasp_labels[i][idx][0] - (min_x) + self.border_size) * 224/(max_x-min_x + 2 * self.border_size)
-                        raw_grasp_labels[i][idx][1] = (raw_grasp_labels[i][idx][1] -  (min_y) + self.border_size) * 224/(max_y - min_y + self.border_size * 2)
                         
-                    grasps, raw_labels = self.create_grasp_rectangle(raw_grasp_labels[i])
+                        x1 = raw_grasp_labels[i][idx][0] = (raw_grasp_labels[i][idx][0] - (min_x) + self.border_size) * 224/(max_x-min_x + 2 * self.border_size)
+                        y1 = raw_grasp_labels[i][idx][1] = (raw_grasp_labels[i][idx][1] -  (min_y) + self.border_size) * 224/(max_y - min_y + self.border_size * 2)
+                        
+                        w1 = raw_grasp_labels[i][idx][3] = raw_grasp_labels[i][idx][3] * 224/(max_x-min_x + 2 * self.border_size)
+                        h1 = raw_grasp_labels[i][idx][4] = raw_grasp_labels[i][idx][4] * 224/(max_y-min_y + 2 * self.border_size)
+                        #import pdb; pdb.set_trace()
+                        cur = [x1.item(),y1.item(),raw_grasp_labels[i][idx][2],w1.item(),h1.item()]
+                        outs.append(cur)
+                        
+                    out_grasps.append(outs)
+                    grasps, raw_labels, grippers_points = self.create_grasp_rectangle(raw_grasp_labels[i])
+                    gripper_labels.append(grippers_points.copy())
                     grasping_labels.append(grasps)
                             
             grasp_labels_vis = raw_grasp_labels.copy()
@@ -122,23 +136,31 @@ class TestDataset(Dataset):
                             for ix in range(len(grasp_labels_vis[idx])):
                                 grasp_labels_vis[idx][ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
                                 grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
-                                
-                        grasp_vis, _ = self.create_grasp_rectangle(grasp_labels_vis[idx])
+                                grasp_labels_vis[idx][ix][3] = grasp_labels_vis[idx][ix][3] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
+                                grasp_labels_vis[idx][ix][4] = grasp_labels_vis[idx][ix][4] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
+                        
+                        grasp_vis, _, gripper_vis = self.create_grasp_rectangle(grasp_labels_vis[idx])
                         if self.crop : 
-                            self.visualize(imgs[idx],grasp_vis,store_dir,image_dict['dims'][idx])
+                            self.visualize(imgs[idx],grasp_vis,gripper_vis,store_dir,image_dict['dims'][idx])
                         else : 
-                            self.visualize(imgs[idx],grasp_vis,store_dir)
+                            self.visualize(imgs[idx],grasp_vis,gripper_vis,store_dir)
                         self.img_cnt += 1
             
-                
             cur_dict['ref_img_path'] = img_paths[0]
-            cur_dict['ref_raw_labels'] = raw_grasp_labels[0]
+            cur_dict['ref_raw_labels'] = out_grasps[0]
             cur_dict['target_img_path'] = img_paths[1:]
+            cur_dict['ref_gripper_pts'] = gripper_labels[0]
+            cur_dict['target_gripper_pts'] = gripper_labels[1:]
             cur_dict['ref_image_rgb'] = imgs[0]
             cur_dict['ref_image_mask'] = masks[0]
-            cur_dict['target_raw_labels'] = raw_grasp_labels[1:]
+            cur_dict['target_raw_labels'] = out_grasps[1:]
             cur_dict['target_grasps'] = grasping_labels[1:]
             cur_dict['ref_grasps'] = grasping_labels[0]
+            if self.crop : 
+                cur_dict['ref_dims'] = image_dict['dims'][0]
+                cur_dict['target_dims'] = image_dict['dims'][1:]
+            
+            
             
             up = num_targets + 1 if len(imgs) > num_targets else len(imgs) + 1
             cur_dict['target_images_masks'] = masks[1:up]
@@ -155,12 +177,12 @@ class TestDataset(Dataset):
         angle += math.atan2(ay-by, ax-bx)
         
         #import pdb; pdb.set_trace()
-        if self.crop :
+        try:
             return [
                 round(bx.item() + radius * math.cos(angle)),
                 round(by.item() + radius * math.sin(angle))
             ]
-        else : 
+        except : 
             return [
                 round(bx + radius * math.cos(angle)),
                 round(by + radius * math.sin(angle))
@@ -181,6 +203,7 @@ class TestDataset(Dataset):
         mids = []
         grasps = []
         centers = []
+        gripper_poses = []
         for n,el in enumerate(grasp) : 
             #import pdb; pdb.set_trace()
             x,y,angle,w,h = el
@@ -191,17 +214,23 @@ class TestDataset(Dataset):
             bl = (x - w/2, y + h/2)
             tr = (x+ w/2, y - h/2)
             br = (x + w/2, y + h/2)
+            #use left and right point representation as in GKNet, choose the midpoints of the vertical lines
+            mr = ((br[0] + tr[0]) * 0.5, (br[1] + tr[1]) * 0.5)
+            ml = ((bl[0] + tl[0]) * 0.5, (bl[1] + tl[1]) * 0.5)
+            
             points = [br,tr,tl,bl]
+            grippers = [ml,mr]
             #tl,bl,tr,br = self.rotate_points((x,y),points,angle) 
             #print(len(points))
             square_vertices = [self.rotated_about(pt[0],pt[1], x, y, math.radians(angle)) for pt in points]      
+            gripper_points = [self.rotated_about(pt[0],pt[1], x, y, math.radians(angle)) for pt in grippers]
             grasps.append(square_vertices)
             centers.append([x,y,angle,w,h])
+            gripper_poses.append(gripper_points)
             #br,tr,tl,bl = square_vertices
-        return grasps, centers
+        return grasps, centers, gripper_poses
     
-     
-    def visualize(self,img,grasp,store_dir,dims=None):
+    def visualize(self,img,grasp,gripper_points,store_dir,dims=None):
         #img = Image.open(img) 
         #import pdb; pdb.set_trace()
         try :
@@ -216,6 +245,7 @@ class TestDataset(Dataset):
         #draw = ImageDraw.Draw(img)
         for n,el in enumerate(grasp) : 
             br,tr,tl,bl = el
+            point_left, point_right = gripper_points[n]
             #br[0],br[1] = int(br[0] * w/224.),int(br[1] * h /224.)
             #bl[0],bl[1] = int(bl[0] * w/224.),int(bl[1] * h /224.)
             #tl[0],tl[1] = int(tl[0] * w/224.),int(tl[1] * h /224.)
@@ -224,6 +254,8 @@ class TestDataset(Dataset):
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))  
             color =  [int(color1[0]), int(color1[1]), int(color1[2])]  
+            img = cv2.circle(img,(int(point_left[0]),int(point_left[1])),2,(255,0,0),thickness=2)
+            img = cv2.circle(img,(int(point_right[0]),int(point_right[1])),2,(0,255,0),thickness=2)
             img = cv2.line(img,tl,bl,color,thickness=2)
             img = cv2.line(img,tr,br,color,thickness=2)
             img = cv2.line(img,br,bl,color,thickness=2)
@@ -232,45 +264,77 @@ class TestDataset(Dataset):
         cv2.imwrite(store_dir + str(self.img_cnt) + '.png',img)
         self.img_cnt += 1
             
-    def visualize_imgs(self,img,grasp,grasp_transformed,grasp_ref,img_ref,dst,centers_new,store_dir):
+    def visualize_imgs(self,img,grasp,grasp_transformed,grasp_ref,img_ref,dst,centers_new,new_pts,store_dir,dims=None):
         #img = Image.open(img) 
         #import pdb; pdb.set_trace()
-        try :
-            img = cv2.imread(img)
-        except :
-            img = img[0]
-            img = cv2.imread(img)
-        img2 = img.copy()
+        #img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        img = cv2.imread(img)
+        
+        #import pdb; pdb.set_trace()
+        #grasp[ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
+        #grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
+        #grasp_labels_vis[idx][ix][3] = grasp_labels_vis[idx][ix][3] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
+        #grasp_labels_vis[idx][ix][4] = grasp_labels_vis[idx][ix][4] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
+        grasps = grasp[0]
+        all_grasps = []
+        for g in grasps : 
+            
+            if self.crop : 
+                g[0] = g[0] * (dims[1] - dims[0] + 2 * self.border_size) /224.
+                g[1] = g[1] * (dims[3] - dims[2] + 2 * self.border_size) /224.
+                g[3] = g[3] * (dims[1] - dims[0] + 2 * self.border_size) /224.
+                g[4] = g[4] * (dims[3] - dims[2] + 2 * self.border_size) /224.
+            
+                
+                
+            all_grasps.append(g)
+            
+        grasp_vis, _, grasp_pts = self.create_grasp_rectangle(all_grasps)
+        
+        
         try : 
             img3 = cv2.imread(img_ref)
         except:
             img3 = cv2.imread(img_ref[0])
+        if self.crop :
+            img = img[int(dims[2]) -self.border_size:int(dims[3]) + self.border_size,int(dims[0]) - self.border_size:int(dims[1]) + self.border_size,:]
+        img2 = img.copy()
         #draw = ImageDraw.Draw(img)
-        for n,el in enumerate(grasp) : 
+        for n,el in enumerate(grasp_vis) : 
             #import pdb; pdb.set_trace()
+            
             br,tr,tl,bl = el
+            point_left, point_right = grasp_pts[n]
+            #import pdb; pdb.set_trace()
+            if not self.crop :
+                point_left = [int(i * 1024/224) for i in point_left]
+                point_right = [int(i * 1024/224) for i in point_right]
             #br = [int(i * 1024/224.) for i in br]
             #tr = [int(i * 1024/224.) for i in tr]
             #bl = [int(i * 1024/224.) for i in bl]
             #tl = [int(i * 1024/224.) for i in tl]
             
             #print(len(square_vertices))    
-            color1 = (list(np.random.choice(range(256), size=3)))  
-            color =[int(color1[0]), int(color1[1]), int(color1[2])]  
-            img = cv2.line(img,tl,bl,color,thickness=2)
-            img = cv2.line(img,tr,br,color,thickness=2)
-            img = cv2.line(img,br,bl,color,thickness=2)
-            img = cv2.line(img,tr,tl,color,thickness=2)
+            color1 = (list(np.random.choice(range(256), size=3)))
+            color =[int(color1[0]), int(color1[1]), int(color1[2])] 
+            img = cv2.circle(img,(int(point_left[0]),int(point_left[1])),2,(255,0,0),thickness=2)
+            img = cv2.circle(img,(int(point_right[0]),int(point_right[1])),2,(0,255,0),thickness=2) 
+            img = cv2.line(img,(int(point_left[0]),int(point_left[1])),(int(point_right[0]),int(point_right[1])),(0,0,255),thickness=2)
+            #img = cv2.line(img,tl,bl,color,thickness=2)
+            #img = cv2.line(img,tr,br,color,thickness=2)
+            #img = cv2.line(img,br,bl,color,thickness=2)
+            #img = cv2.line(img,tr,tl,color,thickness=2)
         
         cv2.imwrite(store_dir + str(self.img_cnt) + 'gt.png',img)
         
+        '''
         for n,el in enumerate(grasp_transformed) : 
             #import pdb; pdb.set_trace()
             br,tr,tl,bl = el
-            #br = [int(i * 1024/224.) for i in br]
-            #tr = [int(i * 1024/224.) for i in tr]
-            #bl = [int(i * 1024/224.) for i in bl]
-            #tl = [int(i * 1024/224.) for i in tl]
+            br = [int(i ) for i in br]
+            tr = [int(i ) for i in tr]
+            bl = [int(i ) for i in bl]
+            tl = [int(i ) for i in tl]
             
             br = [br[1],br[0]]
             tr = [tr[1],tr[0]]
@@ -284,25 +348,51 @@ class TestDataset(Dataset):
             img2 = cv2.line(img2,br,bl,color,thickness=2)
             img2 = cv2.line(img2,tr,tl,color,thickness=2)
             #img2 = cv2.circle(img2,(br[1],br[0]), 2, (255,0,0), -1)
-        
-        for pred in dst[0]:
-            x,y = pred
-            img2 = cv2.circle(img2,(int(y * 1024/224.),int(x * 1024/224)), 2, (0,0,255), -1)
-        
-        for center in centers_new[:,0,:]:
-            x,y = center
-            img2 = cv2.circle(img2,(int(y * 1024/224.),int(x * 1024/224)), 2, (0,255,0), -1)
-        
+        '''
+        for n, el in enumerate(new_pts):
+            ptl, ptr = el[0], el[1]
+            #dims = [i.item() for i in dims]
+            if self.crop : 
+                ptl[0] = ptl[0] * (dims[3] - dims[2] + 2 * self.border_size) /224.
+                ptr[0] = ptr[0] * (dims[3] - dims[2] + 2 * self.border_size) /224.
+                ptl[1] = ptl[1] * (dims[1] - dims[0] + 2 * self.border_size) /224.
+                ptr[1] = ptr[1] * (dims[1] - dims[0] + 2 * self.border_size) /224.
+            else : 
+                ptl[0] = ptl[0] * 1024/224.
+                ptr[0] = ptr[0] * 1024/224.
+                ptr[1] = ptr[1] * 1024/224.
+                ptl[1] = ptl[1] * 1024/224.
+            
+                
+            ptl = [ptl[1],ptl[0]]
+            ptr = [ptr[1],ptr[0]]
+            #import pdb; pdb.set_trace()
+            img2 = cv2.circle(img2,(int(ptl[0]),int(ptl[1])), 2, (255,0,0), -1)
+            img2 = cv2.circle(img2,(int(ptr[0]),int(ptr[1])), 2, (0,255,0), -1)
+            img2 = cv2.line(img2,(int(ptl[0]),int(ptl[1])),(int(ptr[0]),int(ptr[1])),(0,0,255),thickness=2)
+            
+            
+            
+            #import pdb; pdb.set_trace()
+        if self.crop :
+            for pred in dst[0]:
+                x,y = pred
+                img2 = cv2.circle(img2,(int(y * (dims[1] - dims[0] + 2 * self.border_size) /224.),int(x * (dims[3] - dims[2] + 2 * self.border_size) /224.)), 2, (0,0,255), -1)
+            
+            for center in centers_new[:,0,:]:
+                x,y = center
+                img2 = cv2.circle(img2,(int(y * (dims[1] - dims[0] + 2 * self.border_size) /224.),int(x * (dims[3] - dims[2] + 2 * self.border_size) /224.)), 2, (255,255,0), -1)
+            
         
         cv2.imwrite(store_dir + str(self.img_cnt) + '_transformed.png',img2)
         
         for n,el in enumerate(grasp_ref) : 
             #import pdb; pdb.set_trace()
             br,tr,tl,bl = el
-            br = [int(i * 1024/224.) for i in br]
-            tr = [int(i * 1024/224.) for i in tr]
-            bl = [int(i * 1024/224.) for i in bl]
-            tl = [int(i * 1024/224.) for i in tl]
+            br = [int(i ) for i in br]
+            tr = [int(i ) for i in tr]
+            bl = [int(i ) for i in bl]
+            tl = [int(i ) for i in tl]
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))  
@@ -332,6 +422,11 @@ class TestDataset(Dataset):
         target_path = self.items[index]['target_img_path']
         target_raw_labels = self.items[index]['target_raw_labels']
         ref_raw_labels = self.items[index]['ref_raw_labels']
+        if self.crop : 
+            ref_dims = self.items[index]['ref_dims']
+            target_dims = self.items[index]['target_dims']
+        ref_gripper_pts = self.items[index]['ref_gripper_pts']
+        target_gripper_pts = self.items[index]['target_gripper_pts']
         crop_ref,crop_target = None,None
         
         if self.crop : 
@@ -379,16 +474,19 @@ class TestDataset(Dataset):
         ref_raw_labels = torch.tensor(ref_raw_labels) 
         grasps_ref = torch.tensor(grasps_ref) 
         if self.crop == False :
-            target_raw_labels = [i * 224/1024 for i in target_raw_labels]
             grasps_target = [i * 224/1024 for i in grasps_target]
-            ref_raw_labels = ref_raw_labels * 224/1024
             grasps_ref = grasps_ref * 224/1024
             
         target_imgs = torch.stack(target_imgs)
 
-        return img_ref, target_imgs, mask_ref,mask_target, grasps_ref,grasps_target, \
-                ref_path, target_path, target_raw_labels, ref_raw_labels
-        
+        if self.crop : 
+            return img_ref, target_imgs, mask_ref,mask_target, grasps_ref,grasps_target, \
+                    ref_path, target_path, target_raw_labels, ref_raw_labels, ref_dims, target_dims, \
+                        ref_gripper_pts, target_gripper_pts
+        else : 
+            return img_ref, target_imgs, mask_ref,mask_target, grasps_ref,grasps_target, \
+                    ref_path, target_path, target_raw_labels, ref_raw_labels, \
+                        ref_gripper_pts, target_gripper_pts
         
         
 
