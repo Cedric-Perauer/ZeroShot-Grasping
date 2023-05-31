@@ -153,8 +153,8 @@ categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handb
 idx_plot = 0
 
 image_transform = desc.get_transform()
-CROP = False
-dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=False,crop=CROP)
+CROP = True 
+dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'
@@ -387,13 +387,13 @@ for category in ["Jacquard"] :
                     axs['F'].scatter([br[0]],[br[1]],color='blue')
                     axs['F'].scatter([tr[0]],[tr[1]],color='blue')
                 '''
-                if CROP : 
+                if CROP == True : 
                     dataset.visualize_imgs(target_path[best_idxs[i]][0],target_raw_labels[best_idxs[i]],
-                                        grasp_new,grasps_ref[0],ref_path,dst,centers_new,
-                                        new_pts,store_dir=vis_dir,dims=target_dims[best_idxs[i]])
+                                        grasp_new,ref_raw_labels[0],ref_path,dst,centers_new,
+                                        new_pts,store_dir=vis_dir,dims=target_dims[best_idxs[i]],dims_ref=ref_dims)
                 else : 
                     dataset.visualize_imgs(target_path[best_idxs[i]][0],target_raw_labels[best_idxs[i]],
-                                        grasp_new,grasps_ref[0],ref_path,dst,centers_new,
+                                        grasp_new,ref_raw_labels,ref_path,dst,centers_new,
                                         new_pts,store_dir=vis_dir)
                         
                 #points = np.array([bl,tl,tr,br])
