@@ -33,7 +33,7 @@ class TestDataset(Dataset):
                  num_targets=1,vis=False,crop=True):
         self.dataset_root = dataset_root
         self.crop = crop
-        self.border_size = 20
+        self.border_size = 100
         self.image_transform = image_transform
         self.img_vis_dir = 'labels_vis/'
         self.classes = os.listdir(dataset_root)
@@ -210,6 +210,7 @@ class TestDataset(Dataset):
         centers = []
         gripper_poses = []
         for n,el in enumerate(grasp) : 
+            #import pdb; pdb.set_trace()
             #import pdb; pdb.set_trace()
             x,y,angle,w,h = el
             if [x,y] in mids:

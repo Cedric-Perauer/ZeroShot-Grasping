@@ -9,9 +9,12 @@ from torch.utils.data import DataLoader
 from pytorch3d.ops import utils as oputil
 from pytorch3d.renderer.cameras import get_world_to_view_transform
 import torchvision 
-from PIL import Image
+from PIL import Image, ImageDraw
 from matplotlib.patches import Polygon
 import cv2
+import shutil
+import einops
+from einops import repeat
 
 # Descriptor extractor 
 from zsp.method.zero_shot_pose import DescriptorExtractor, ZeroShotPoseMethod
@@ -141,6 +144,9 @@ note = args.note
 log_dir = os.path.join(log_dir,
                        f"{args.num_correspondences}corr_{kmeans_str}_{args.binning}bin_{args.ransac_thresh}ransac_{args.n_target}tgt_{note}")
 
+folder_name = 'crops/'
+
+
 # ---------------
 # LOAD MODEL
 # ---------------
@@ -153,7 +159,7 @@ categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handb
 idx_plot = 0
 
 image_transform = desc.get_transform()
-CROP = True 
+CROP = False 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
 dataset.img_cnt = 0 
 
@@ -241,6 +247,7 @@ for category in ["Jacquard"] :
         # ----------------
         _, _, _, t, t = attn.size()
         N = int(np.sqrt(t - 1)) # N is the height or width of the feature map
+        # finding the optimal view only 
         similarities, best_idxs = desc.find_closest_match(attn, output_cls_tokens, sim_selected_12, batch_size)
         #import pdb; pdb.set_trace() 
         # -----------------
@@ -269,6 +276,7 @@ for category in ["Jacquard"] :
             all_points1.append(points1_rescaled.clone().int().long())
             all_points2.append(points2_rescaled.clone().int().long())
         
+        
         for i in range(len(all_points1)):
                     for j,pts in enumerate(all_points1[i]) :
                             x,y = pts
@@ -287,6 +295,125 @@ for category in ["Jacquard"] :
         
         out1 = all_points1[0][all_points1[0][:,0] != -1].numpy().reshape(-1,1,2).astype(np.float32)
         out2 = all_points2[0][all_points2[0][:,0] != -1].numpy().reshape(-1,1,2).astype(np.float32)
+        
+        #target_img = desc.denorm_torch_to_pil(all_target_images[0][best_idxs[0]])
+        #ref_img = desc.denorm_torch_to_pil(ref_image[0])
+        
+        target_img = Image.open(target_path[best_idxs[0]][0])
+        target_mask = Image.open(target_path[best_idxs[0]][0].replace('RGB','mask'))
+        ref_img = Image.open(ref_path[0])
+        ref_mask = Image.open(ref_path[0].replace('RGB','mask'))
+        
+        crop_dir = folder_name + str(batch_idx) + '/'
+        if os.path.exists(crop_dir) == True :
+            shutil.rmtree(crop_dir)
+        os.makedirs(crop_dir)
+        
+        for i in range(out1.shape[0]):
+            ref_pt = out1[i,0,:]
+            ref_y ,ref_x = ref_pt
+            target_pt = out2[i,0,:]
+            target_y, target_x = target_pt
+            #import pdb; pdb.set_trace()
+            border_size = 100
+            ref_y = ref_y * 1024/224.
+            ref_x = ref_x * 1024/224.
+            target_x = target_x * 1024/224.
+            target_y = target_y * 1024/224.
+            
+            
+        
+            target_crop = target_img.crop((target_x - border_size, target_y - border_size, target_x + border_size, target_y + border_size))
+            mask_target = target_mask.crop((target_x - border_size, target_y - border_size, target_x + border_size, target_y + border_size))
+            target_crop_raw = target_crop.copy()
+            ref_crop = ref_img.crop((ref_x-border_size, ref_y-border_size, ref_x+border_size, ref_y+border_size))
+            mask_ref = ref_mask.crop((ref_x-border_size, ref_y-border_size, ref_x+border_size, ref_y+border_size))
+            ref_crop_raw = ref_crop.copy()
+            
+            #mask_ref.show()
+            #ref_crop.show()
+            w, h = ref_crop.size
+            new = Image.new(mode="RGB", size=(w,h))
+            #import pdb;pdb.set_trace()
+            ref_crop_raw = Image.composite(ref_crop, new, mask_ref)
+            #im.show()
+            #mask_ref.show()
+            #import pdb; pdb.set_trace()
+            ## extract grasps that are within this area 
+            min_x, max_x, min_y, max_y = (target_x - border_size) , (target_x + border_size) , (target_y - border_size) , (target_y + border_size) 
+            relevant_gripper_pts = []
+            target_crop_im = ImageDraw.Draw(target_crop)
+            ref_crop_im = ImageDraw.Draw(ref_crop)
+
+
+            for idx, ref in enumerate(target_gripper_pts[best_idxs[0]]):
+                x1,y1,x2,y2 = ref[0][0], ref[0][1], ref[1][0], ref[1][1]
+                x1 = x1.item()  * 1024/224.
+                x2 = x2.item()  * 1024/224.
+                y1 = y1.item()  * 1024/224.
+                y2 = y2.item()  * 1024/224.
+
+                if x1 > min_x and x1 < max_x and y1 > min_y and y1 < max_y and x2 > min_x and x2 < max_x and  y2 > min_y and y2 < max_y:
+                    relevant_gripper_pts.append(ref)
+                    ## get gripper pose relative to the the crop area
+                    cur_x1, cur_y1, cur_x2, cur_y2 = x1 - min_x, y1 - min_y, x2 - min_x, y2 - min_y
+                    #import pdb; pdb.set_trace()
+                    target_crop_im.ellipse((cur_x1 - 5, cur_y1 - 5, cur_x1 + 5, cur_y1 + 5), outline ='blue')
+                    target_crop_im.ellipse((cur_x2 - 5, cur_y2 - 5, cur_x2 + 5, cur_y2 + 5) ,outline ='red')
+                    
+            vis_target = target_img.copy()
+            vis_ref = ref_img.copy()
+            target_im = ImageDraw.Draw(vis_target)
+            ref_im = ImageDraw.Draw(vis_ref)
+            
+            targets = image_transform(target_crop_raw).unsqueeze(0).unsqueeze(0)
+            targets = repeat(targets,'b c d w h -> b (repeat c) d w h',repeat=4) ##need to have some amount of n_targets dimension
+            
+            #ref_crop_raw.show()
+            #target_crop_raw.show()
+            
+            
+            crop_imgs = torch.cat([image_transform(ref_crop_raw).unsqueeze(0).unsqueeze(0),targets ],dim=1).to(device)
+            features, attn, output_cls_tokens = desc.extract_features_and_attn(crop_imgs)
+            # Create descriptors from features, return descriptors and attn in appropriate shapes
+            # attn shape Bx(n_tgt+1)xhxtxt, features shape Bx(n_tgt+1)x1x(t-1)xfeat_dim
+            features, attn = desc.create_reshape_descriptors(features, attn, batch_size, device)
+            # Split ref/target, repeat ref to match size of target, and flatten into batch dimension
+            #print('features shape',features.shape)
+            #print('attn shape',attn.shape)
+            ref_feats, target_feats, ref_attn, target_attn = desc.split_ref_target(features, attn)
+            
+            (selected_points_image_2, # 10x50x2
+            selected_points_image_1, # 10x50x2
+            cyclical_dists,          # 10x28x28
+            sim_selected_12) = desc.get_correspondences(ref_feats, target_feats, ref_attn, target_attn, device)
+            points2 = selected_points_image_2[0]
+            points1 = selected_points_image_1[0]
+            
+            #import pdb; pdb.set_trace()
+            for pt in range(points1.shape[0]): 
+                x1,y1 = points1[pt]
+                x2,y2 = points2[pt]
+                
+                target_crop_im.ellipse((x2 - 2,y2 -2, x2 + 2,y2 + 2), fill = 'blue', outline ='blue')
+                ref_crop_im.ellipse((x1 - 2,y1 -2, x1 + 2,y1 + 2), fill = 'blue', outline ='blue')
+                
+            
+            ref_im.rectangle([ref_x-border_size, ref_y-border_size, ref_x+border_size, ref_y+border_size], outline ="green")
+            target_im.rectangle([target_x-border_size, target_y-border_size, target_x+border_size, target_y+border_size], outline ="green")
+            
+            target_im.ellipse((target_x - 2, target_y -2, target_x + 2,target_y + 2), fill = 'blue', outline ='blue')
+            ref_im.ellipse((ref_x - 2, ref_y -2, ref_x + 2,ref_y + 2), fill = 'blue', outline ='blue')
+            
+                        
+            target_crop.save(crop_dir + 'target_crop_' + str(i) + '.png')
+            vis_target.save(crop_dir + 'target_vis_' + str(i) + '.png')
+
+            ref_crop.save(crop_dir + 'ref_crop_' + str(i) + '.png')
+            vis_ref.save(crop_dir + 'ref_vis_' + str(i) + '.png')
+
+            
+            #import pdb; pdb.set_trace()
         
         matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
         # applying perspective algorithm
@@ -317,7 +444,7 @@ for category in ["Jacquard"] :
         
         
         
-        
+        continue 
         if plot_results:
 
             # -----------------
@@ -329,7 +456,7 @@ for category in ["Jacquard"] :
                 idx_plot += 1
                 save_name = os.path.join(fig_dir, save_name)
 
-                fig, axs = plt.subplot_mosaic([['A', 'B', 'B','C'],
+                fig, axs = plt.subplot_mosaic([['A', 'B', 'C','C'],
                                             ['D','D','E','F']],
                                             figsize=(10,5))
                 for ax in axs.values():
@@ -348,7 +475,6 @@ for category in ["Jacquard"] :
                     all_target_images[i][j]) for j in range(args.n_target)]
                 tgt_pils = tile_ims_horizontal_highlight_best(tgt_pils, highlight_idx=best_idxs[i])
                 axs['B'].imshow(tgt_pils)
-                print(desc.torch_to_pil(mask_ref[0]).shape)
                 axs['D'].imshow(desc.torch_to_pil(mask_ref[0]),cmap='Greys_r')
                 idcs = (mask_ref[0] != 0).nonzero(as_tuple=False)[:,1:3]
                 max_x,min_x,max_y,min_y = idcs[:,0].max(),idcs[:,0].min(),idcs[:,1].max(),idcs[:,1].min()
@@ -357,10 +483,8 @@ for category in ["Jacquard"] :
                 axs['D'].scatter([min_y],[max_x],color='cyan',s=3)
                 axs['D'].scatter([max_y],[min_x],color='cyan',s=3)
                 
-                for pts in all_points1[i]:
+                for pts in out1.reshape(-1,2):
                     x1,y1 = pts
-                    if x1 < 0 : 
-                        continue
                     axs['D'].scatter([y1],[x1],color='blue',s=1)
 
                 axs['E'].imshow(desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]))
@@ -395,7 +519,7 @@ for category in ["Jacquard"] :
                                         new_pts,store_dir=vis_dir,dims=target_dims[best_idxs[i]],dims_ref=ref_dims)
                 else : 
                     dataset.visualize_imgs(target_path[best_idxs[i]][0],target_raw_labels[best_idxs[i]],
-                                        grasp_new,ref_raw_labels,ref_path,dst,centers_new,
+                                        grasp_new,ref_raw_labels[0],ref_path,dst,centers_new,
                                         new_pts,store_dir=vis_dir)
                         
                 #points = np.array([bl,tl,tr,br])
@@ -408,8 +532,10 @@ for category in ["Jacquard"] :
                 #import pdb; pdb.set_trace()
                 #axs['E'].scatter([y1],[x1],color='green')
                 #axs['E'].scatter([ypred],[xpred],color='blue')
-                    
-                draw_correspondences_lines(all_points1[i], all_points2[i],
+                out1 = [out1.reshape(-1,2)]
+                out2 = [out2.reshape(-1,2)]
+                #import pdb; pdb.set_trace()
+                draw_correspondences_lines(out1[i],out2[i],
                                         desc.denorm_torch_to_pil(ref_image[i]),
                                         desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]),
                                         axs['C'])

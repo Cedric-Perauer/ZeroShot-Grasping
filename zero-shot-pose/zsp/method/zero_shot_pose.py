@@ -225,7 +225,7 @@ class DescriptorExtractor():
         """
         batch_size, _, h, t, t = attn.size()
         feat_dim_after_binning = features.size()[-1]
-        
+         
         # Split descriptors, attn back to reference image & target images
         ref_feats, target_feats = features.split((1, self.n_target), dim=1)
         ref_attn, target_attn = attn.split((1, self.n_target), dim=1)
