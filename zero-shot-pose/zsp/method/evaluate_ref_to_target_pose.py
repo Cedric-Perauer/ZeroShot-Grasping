@@ -275,13 +275,13 @@ for category in ["Jacquard"] :
                             mask_value = mask_ref[0,0,x,y]
                             #import pdb; pdb.set_trace()
                             #print(mask_value)
-                            if mask_value.item() == 0 :
-                                #import pdb; pdb.set_trace()        
-                                #set correspondences that are outside of the object area to 0 
-                                # right now : ref mask is used, could be changed to query mask later 
-                                # (unless we have segmentation for unknown object)
-                                all_points1[i][j] = torch.Tensor([-1,-1])
-                                all_points2[i][j] = torch.Tensor([-1,-1])
+                            #if mask_value.item() == 0 :
+                            #    #import pdb; pdb.set_trace()        
+                            #    #set correspondences that are outside of the object area to 0 
+                            #    # right now : ref mask is used, could be changed to query mask later 
+                            #    # (unless we have segmentation for unknown object)
+                            #    all_points1[i][j] = torch.Tensor([-1,-1])
+                            #    all_points2[i][j] = torch.Tensor([-1,-1])
         
         
         
