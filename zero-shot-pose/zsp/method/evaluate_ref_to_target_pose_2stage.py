@@ -346,7 +346,7 @@ for category in ["Jacquard"] :
             #import pdb; pdb.set_trace()
             ## extract grasps that are within this area 
             min_x, max_x, min_y, max_y = (target_x - border_size) , (target_x + border_size) , (target_y - border_size) , (target_y + border_size) 
-            relevant_gripper_pts = []
+            target_gripper_pts_relevant = []
             target_crop_im = ImageDraw.Draw(target_crop)
             ref_crop_im = ImageDraw.Draw(ref_crop)
 
@@ -359,7 +359,7 @@ for category in ["Jacquard"] :
                 y2 = y2.item()  * 1024/224.
 
                 if x1 > min_x and x1 < max_x and y1 > min_y and y1 < max_y and x2 > min_x and x2 < max_x and  y2 > min_y and y2 < max_y:
-                    relevant_gripper_pts.append(ref)
+                    target_gripper_pts_relevant.append(ref)
                     ## get gripper pose relative to the the crop area
                     cur_x1, cur_y1, cur_x2, cur_y2 = x1 - min_x, y1 - min_y, x2 - min_x, y2 - min_y
                     #import pdb; pdb.set_trace()
@@ -415,9 +415,18 @@ for category in ["Jacquard"] :
                 all_points1_cur.append(points1_rescaled.clone().int().long())
                 all_points2_cur.append(points2_rescaled.clone().int().long())
             
-                
-            #points2 = selected_points_image_2[0]
-            #points1 = selected_points_image_1[0]
+            
+            matrixt, mask = cv2.findHomography(all_points1_cur[0].reshape(-1,1,2).cpu().numpy().astype(np.float32), 
+                                            all_points2_cur[0].reshape(-1,1,2).cpu().numpy().astype(np.float32)
+                                            , cv2.RANSAC, 5.0)
+            
+            target_gripper_pts_relevant = torch.Tensor(target_gripper_pts_relevant)
+            target_gripper_pts_relevant = target_gripper_pts_relevant.numpy().reshape(1,-1,2).astype(np.float32)
+            target_gripper_pts_relevant[:,:,0], target_gripper_pts_relevant[:,:,1] = target_gripper_pts_relevant[:,:,1].copy(), target_gripper_pts_relevant[:,:,0].copy()
+            try : 
+                ref_pts = cv2.perspectiveTransform(target_gripper_pts_relevant, matrixt).reshape(-1,2,2)
+            except : 
+                continue
             
             for pt in range(points1.shape[0]): 
                 y1,x1 = all_points1_cur[0][pt]
@@ -425,7 +434,16 @@ for category in ["Jacquard"] :
                 
                 target_crop_im.ellipse((x2 - 2,y2 -2, x2 + 2,y2 + 2), fill = 'blue', outline ='blue')
                 ref_crop_im.ellipse((x1 - 2,y1 -2, x1 + 2,y1 + 2), fill = 'blue', outline ='blue')
+            
+            for x in range(ref_pts.shape[0]): 
+                left,right = ref_pts[x]
+                y1,x1 = left
+                y2,x2 = right
+                ref_crop_im.ellipse((x1 - 2,y1 -2, x1 + 2,y1 + 2),  outline ='red')
+                ref_crop_im.ellipse((x2 - 2,y2 -2, x2 + 2,y2 + 2),  outline ='blue')
                 
+                
+                #import pdb;pdb.set_trace() 
             
             ref_im.rectangle([ref_x-border_size, ref_y-border_size, ref_x+border_size, ref_y+border_size], outline ="green")
             target_im.rectangle([target_x-border_size, target_y-border_size, target_x+border_size, target_y+border_size], outline ="green")
@@ -443,7 +461,6 @@ for category in ["Jacquard"] :
 
             
             #import pdb; pdb.set_trace()
-        
         matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
         # applying perspective algorithm
         dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
