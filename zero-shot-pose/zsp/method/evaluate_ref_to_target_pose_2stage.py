@@ -196,7 +196,6 @@ for category in ["Jacquard"] :
             'acc_30': AverageMeter(),
         }
     for batch_idx, batch in enumerate(tqdm(dataloader)):
-        
         if CROP : 
             ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
                 target_raw_labels, ref_raw_labels, ref_dims, target_dims, ref_gripper_pts, target_gripper_pts = batch
@@ -322,22 +321,19 @@ for category in ["Jacquard"] :
             ref_x = ref_x * 1024/224.
             target_x = target_x * 1024/224.
             target_y = target_y * 1024/224.
-            
-            
-
-
+        
             target_crop = target_img.crop((target_x - border_size, target_y - border_size, target_x + border_size, target_y + border_size))
             mask_target = target_mask.crop((target_x - border_size, target_y - border_size, target_x + border_size, target_y + border_size))
-            
             
             target_crop_raw = target_crop.copy()
             ref_crop = ref_img.crop((ref_x-border_size, ref_y-border_size, ref_x+border_size, ref_y+border_size))
             mask_ref_c = ref_mask.crop((ref_x-border_size, ref_y-border_size, ref_x+border_size, ref_y+border_size))
-            ref_crop_raw = ref_crop.copy()
-            
+            mask_ref_ct = dataset.transform_tensor(mask_ref_c)
+            ref_crop_raw = ref_crop.copy()                                               
+            mask_target_t = dataset.transform_tensor(mask_target)
             #mask_ref.show()
             #ref_crop.show()
-            w, h = ref_crop.size
+            w, h = ref_crop.size                 
             new = Image.new(mode="RGB", size=(w,h))
             #import pdb;pdb.set_trace()
             #ref_crop_raw = Image.composite(ref_crop, new, mask_ref_c)
@@ -346,7 +342,9 @@ for category in ["Jacquard"] :
             #import pdb; pdb.set_trace()
             ## extract grasps that are within this area 
             min_x, max_x, min_y, max_y = (target_x - border_size) , (target_x + border_size) , (target_y - border_size) , (target_y + border_size) 
+            refmin_x, refmax_x, refmin_y, refmax_y = (ref_x - border_size) , (ref_x + border_size) , (ref_y - border_size) , (ref_y + border_size) 
             target_gripper_pts_relevant = []
+            ref_gripper_pts_relevant = []
             target_crop_im = ImageDraw.Draw(target_crop)
             ref_crop_im = ImageDraw.Draw(ref_crop)
 
@@ -359,13 +357,30 @@ for category in ["Jacquard"] :
                 y2 = y2.item()  * 1024/224.
 
                 if x1 > min_x and x1 < max_x and y1 > min_y and y1 < max_y and x2 > min_x and x2 < max_x and  y2 > min_y and y2 < max_y:
-                    target_gripper_pts_relevant.append(ref)
+                    
                     ## get gripper pose relative to the the crop area
                     cur_x1, cur_y1, cur_x2, cur_y2 = x1 - min_x, y1 - min_y, x2 - min_x, y2 - min_y
-                    #import pdb; pdb.set_trace()
+                    target_gripper_pts_relevant.append([[torch.Tensor([cur_x1]), torch.Tensor([cur_y1])], [torch.Tensor([cur_x2]), torch.Tensor([cur_y2])]])
                     target_crop_im.ellipse((cur_x1 - 5, cur_y1 - 5, cur_x1 + 5, cur_y1 + 5), outline ='blue')
                     target_crop_im.ellipse((cur_x2 - 5, cur_y2 - 5, cur_x2 + 5, cur_y2 + 5) ,outline ='red')
-                    
+            
+            for idx, ref in enumerate(ref_gripper_pts):
+                x1,y1,x2,y2 = ref[0][0], ref[0][1], ref[1][0], ref[1][1]
+                x1 = x1.item()  * 1024/224.
+                x2 = x2.item()  * 1024/224.
+                y1 = y1.item()  * 1024/224.
+                y2 = y2.item()  * 1024/224.
+
+                if x1 > refmin_x and x1 < refmax_x and y1 > refmin_y and y1 < refmax_y and x2 > refmin_x and x2 < refmax_x and  y2 > refmin_y and y2 < refmax_y:
+                    #target_gripper_pts_relevant.append(ref)
+                    ## get gripper pose relative to the the crop area
+                    cur_x1, cur_y1, cur_x2, cur_y2 = x1 - refmin_x, y1 - refmin_y, x2 - refmin_x, y2 - refmin_y
+                    ref_gripper_pts_relevant.append([[torch.Tensor([cur_x1]), torch.Tensor([cur_y1])], [torch.Tensor([cur_x2]), torch.Tensor([cur_y2])]])
+                    ref_crop_im.ellipse((cur_x1 - 5, cur_y1 - 5, cur_x1 + 5, cur_y1 + 5), outline ='green')
+                    ref_crop_im.ellipse((cur_x2 - 5, cur_y2 - 5, cur_x2 + 5, cur_y2 + 5) ,outline ='green')
+            
+            
+                                
             vis_target = target_img.copy()
             vis_ref = ref_img.copy()
             target_im = ImageDraw.Draw(vis_target)
@@ -415,25 +430,45 @@ for category in ["Jacquard"] :
                 all_points1_cur.append(points1_rescaled.clone().int().long())
                 all_points2_cur.append(points2_rescaled.clone().int().long())
             
+            all_points2_cur = all_points2_cur[0]
+            all_points1_cur = all_points1_cur[0]
             
-            matrixt, mask = cv2.findHomography(all_points1_cur[0].reshape(-1,1,2).cpu().numpy().astype(np.float32), 
-                                            all_points2_cur[0].reshape(-1,1,2).cpu().numpy().astype(np.float32)
-                                            , cv2.RANSAC, 5.0)
+            for jj, pts in enumerate(all_points2_cur):
+                x,y = pts
+                x = x.item()
+                y = y.item() 
+                mask_vals = mask_target_t[0,x,y]
+                #print(mask_vals)
+                if mask_vals == 0 :
+                    all_points1_cur[jj] = torch.Tensor([-1,-1])
+                    all_points2_cur[jj] = torch.Tensor([-1,-1])
+            
+            all_points1_cur = all_points1_cur[all_points1_cur[:,0] != -1]
+            all_points2_cur = all_points2_cur[all_points2_cur[:,0] != -1]
+            
+            try : 
+                matrixt, mask = cv2.findHomography(all_points2_cur.reshape(-1,1,2).cpu().numpy().astype(np.float32), 
+                                                all_points1_cur.reshape(-1,1,2).cpu().numpy().astype(np.float32)
+                                                , cv2.RANSAC, 5.0)
+            except :
+                continue
             
             target_gripper_pts_relevant = torch.Tensor(target_gripper_pts_relevant)
             target_gripper_pts_relevant = target_gripper_pts_relevant.numpy().reshape(1,-1,2).astype(np.float32)
             target_gripper_pts_relevant[:,:,0], target_gripper_pts_relevant[:,:,1] = target_gripper_pts_relevant[:,:,1].copy(), target_gripper_pts_relevant[:,:,0].copy()
+            
+            #pts2_transform = 
             try : 
                 ref_pts = cv2.perspectiveTransform(target_gripper_pts_relevant, matrixt).reshape(-1,2,2)
             except : 
                 continue
             
-            for pt in range(points1.shape[0]): 
-                y1,x1 = all_points1_cur[0][pt]
-                y2,x2 = all_points2_cur[0][pt]
+            for pt in range(all_points1_cur.shape[0]): 
+                y1,x1 = all_points1_cur[pt]
+                y2,x2 = all_points2_cur[pt]
                 
-                target_crop_im.ellipse((x2 - 2,y2 -2, x2 + 2,y2 + 2), fill = 'blue', outline ='blue')
-                ref_crop_im.ellipse((x1 - 2,y1 -2, x1 + 2,y1 + 2), fill = 'blue', outline ='blue')
+                target_crop_im.ellipse((x2 - 2,y2 -2, x2 + 2,y2 + 2), fill = 'black', outline ='black')
+                ref_crop_im.ellipse((x1 - 2,y1 -2, x1 + 2,y1 + 2), fill = 'black', outline ='black')
             
             for x in range(ref_pts.shape[0]): 
                 left,right = ref_pts[x]
@@ -457,6 +492,17 @@ for category in ["Jacquard"] :
             #vis_target.save(crop_dir + 'target_vis_' + str(i) + '.png')
 
             ref_crop.save(crop_dir + 'ref_crop_RGB' + str(i) + '.png')
+            fig, axs = plt.subplot_mosaic([['A']],
+                                            figsize=(10,5))
+            draw_correspondences_lines(all_points1_cur,all_points2_cur,
+                                        desc.denorm_torch_to_pil(image_transform(ref_crop_raw)),
+                                        desc.denorm_torch_to_pil(image_transform(target_crop_raw)),
+                                        axs['A'])
+            plt.tight_layout()
+            plt.savefig(crop_dir + 'correspondences_' + str(i) + '.png', dpi=150)
+            plt.close('all')
+            
+            
             #vis_ref.save(crop_dir + 'ref_vis_' + str(i) + '.png')
 
             
@@ -583,8 +629,8 @@ for category in ["Jacquard"] :
                 out2 = [out2.reshape(-1,2)]
                 #import pdb; pdb.set_trace()
                 draw_correspondences_lines(out1[i],out2[i],
-                                        desc.denorm_torch_to_pil(image_transform(ref_image[i])),
-                                        desc.denorm_torch_to_pil(image_transform(all_target_images[i][best_idxs[i]])),
+                                        desc.denorm_torch_to_pil(ref_image[i]),
+                                        desc.denorm_torch_to_pil(all_target_images[i][best_idxs[i]]),
                                         axs['C'])
                 '''
                 draw_correspondences_lines(out1[i],out2[i],
