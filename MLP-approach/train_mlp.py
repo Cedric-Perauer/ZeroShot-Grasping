@@ -14,7 +14,8 @@ import cv2
 import shutil
 import einops
 from einops import repeat
-from dataset import TestDataset
+from dataset_reference import TestDataset
+from dataset_augment import AugmentDataset
 from model import GraspTransformer
 
 LOG_DIR = 'logs/'
@@ -155,6 +156,7 @@ idx_plot = 0
 image_transform = get_transform()
 CROP = False 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
+dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'
