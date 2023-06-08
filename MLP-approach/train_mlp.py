@@ -11,6 +11,7 @@ from torchvision import transforms
 from PIL import Image, ImageDraw
 from matplotlib.patches import Polygon
 import cv2
+import math
 import shutil
 import einops
 from einops import repeat
@@ -170,32 +171,64 @@ for category in ["Jacquard"] :
     dataloader = DataLoader(dataset, batch_size = args.batch_size,num_workers=0,shuffle=False)
     categories = dataset.classes
     for batch_idx, batch in enumerate(tqdm(dataloader)):
-        if CROP : 
-            ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
-                target_raw_labels, ref_raw_labels, ref_dims, target_dims, ref_gripper_pts, target_gripper_pts = batch
-        else : 
-            ref_image, all_target_images, mask_ref, mask_targets, grasps_ref, grasps_target,ref_path, target_path,\
-                target_raw_labels, ref_raw_labels,  ref_gripper_pts, target_gripper_pts = batch
+        data = batch
         
-        #extract x,y centers of the grasping boxes
-        centers_ref  = ref_raw_labels[:][:,:,0:2]
-        centers_targets = [i[:,:,0:2] for i in target_raw_labels]
-
-        batch_size = ref_image.size(0)
-        #ref_image = Image.open('/home/cedric/ZeroShot-Grasping/zero-shot-pose/zsp/0/ref_crop_RGB26.png')
-        #target_image = Image.open('/home/cedric/ZeroShot-Grasping/zero-shot-pose/zsp/0/target_crop_RGB_26.png')
-        #all_images = torch.cat([image_transform(ref_image).unsqueeze(0).unsqueeze(0), image_transform(target_image).unsqueeze(0).unsqueeze(0)], dim=1).to(device)
-        #img_clone = all_images.clone()
-        #all_images = torch.cat([ref_image.unsqueeze(1), all_target_images], dim=1).to(device) # B x (N_TGT + 1) x 3 x S x S
+        img = data['img']
+        augmented_img = data['img_augmented']
+        gknet_label = data['img_grasp']
+        augmented_gknet_label = data['img_augmented_grasp']
+        batch_size = img.shape[0]
+        
+        ##for the visualisation of the grasp 
+        VIS = True
+        if VIS : 
+            for i in range(batch_size):
+                w = augmented_gknet_label[i][3]
+                x,y = augmented_gknet_label[i][0], augmented_gknet_label[i][1]
+                angle = augmented_gknet_label[i][2]
+                lx,ly = x - w/2, y
+                rx,ry = x + w/2, y 
+                lx,ly = dataset.rotated_about(lx,ly,x,y,math.radians(angle))
+                rx,ry = dataset.rotated_about(rx,ry,x,y,math.radians(angle))
+                
+                w = gknet_label[i][3]
+                xt,yt = gknet_label[i][0], gknet_label[i][1]
+                angle = gknet_label[i][2]
+                lxt,lyt = xt - w/2, yt
+                rxt,ryt = xt + w/2, yt 
+                lxt,lyt = dataset.rotated_about(lxt,lyt,xt,yt,math.radians(angle))
+                rxt,ryt = dataset.rotated_about(rxt,ryt,xt,yt,math.radians(angle))
+            
+                save_name = 'vis_out/' + str(idx_plot) 
+                fig, axs = plt.subplot_mosaic([['A', 'B']],
+                                                    figsize=(10,5))
+                axs['A'].set_title('Normal image')
+                axs['B'].set_title('Augmented image')
+                axs['A'].imshow(denorm_torch_to_pil(img[i]))
+                axs['A'].scatter([lxt],[lyt],color='red',s=3)
+                axs['A'].scatter([rxt],[ryt],color='green',s=3)
+                axs['A'].scatter([xt],[yt],color='cyan',s=3)
+                
+                axs['B'].imshow(denorm_torch_to_pil(augmented_img[i]))
+                axs['B'].scatter([lx],[ly],color='cyan',s=3)
+                axs['B'].scatter([rx],[ry],color='cyan',s=3)
+                axs['B'].scatter([x],[y],color='cyan',s=3)
+                plt.tight_layout()
+                plt.savefig(save_name + '.png', dpi=150)
+                plt.close('all')
+                idx_plot = idx_plot + 1
+        
+        
+        
+        '''
+        relevant for inference later
         best_idx, query_feats, ref_feats = model.select_best_views(all_target_images[0],ref_image)
         ref_raw_labels = ref_raw_labels[:,:,:4] #remove the last column (h) 
         target_grasp = target_raw_labels[best_idx][:,:,:4]
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
         x,y,theta,w = model(query_feats,ref_feats)
-        import pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
         
-        
-        ##plot 
         save_name = 'vis_out/' + str(idx_plot) 
         fig, axs = plt.subplot_mosaic([['A', 'B']],
                                             figsize=(10,5))
@@ -210,4 +243,5 @@ for category in ["Jacquard"] :
         plt.savefig(save_name + '.png', dpi=150)
         plt.close('all')
         idx_plot = idx_plot + 1
+        '''
         

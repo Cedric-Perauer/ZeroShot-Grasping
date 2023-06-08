@@ -23,7 +23,7 @@ jacquard_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Ja
 
 def augment_image(image,angle=10):
         ##rotate the image
-        image_augmented = TF.rotate(image_augmented, angle)
+        image_augmented = TF.rotate(image, angle)
         
         return image_augmented
 
@@ -51,7 +51,6 @@ class AugmentDataset(Dataset):
         self.transform_tensor = transforms.Compose([transforms.Resize((224,224)),
                                                     transforms.ToTensor()])
         
-        self.augment_transform = get_transform_augment(self.image_norm_mean,self.image_norm_std)
         
         for cat in self.classes :
             if os.path.isdir(self.dataset_root + cat) == False:
@@ -82,13 +81,19 @@ class AugmentDataset(Dataset):
             grasping_labels = []
             raw_grasp_labels = []
             gripper_labels = [] 
+            
+            
             for idx,txt in enumerate(grasp_txts):
                 grasp = []
+                mids = []
                 with open(txt,'r') as f:
                     lines = f.readlines()
                     for l in lines :
                         split = l.split(';')
                         x,y,angle,w,h = split 
+                        if [x,y] in mids :
+                            continue
+                        mids.append([x,y])
                         h = h.split('\n')[0]
                         x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
                         if self.crop == False : 
@@ -233,8 +238,8 @@ class AugmentDataset(Dataset):
             #import pdb; pdb.set_trace()
             #import pdb; pdb.set_trace()
             x,y,angle,w,h = el
-            if [x,y] in mids:
-                continue
+            #if [x,y] in mids: deactivate for the plots
+            #    continue
             mids.append([x,y])
             tl = (x - w/2, y - h/2)
             bl = (x - w/2, y + h/2)
@@ -254,6 +259,7 @@ class AugmentDataset(Dataset):
             centers.append([x,y,angle,w,h])
             gripper_poses.append(gripper_points)
             #br,tr,tl,bl = square_vertices
+        #import pdb; pdb.set_trace()
         return grasps, centers, gripper_poses
     
     def visualize(self,img,grasp,gripper_points,store_dir,dims=None):
@@ -489,23 +495,16 @@ class AugmentDataset(Dataset):
         angle = 10 
         augmented_img = augment_image(img,angle)
         augmented_gknet_label = gknet_label.copy()  
-        augmented_gknet_label[2] = augmented_gknet_label[2] + angle #just change the angle of the label here
-        x,y = self.rotate((224/2,224/2),(augmented_gknet_label[0],augmented_gknet_label[1]))
+        augmented_gknet_label[2] = augmented_gknet_label[2] - angle #just change the angle of the label here
+        x,y = self.rotated_about(augmented_gknet_label[0],augmented_gknet_label[1],224/2.,224/2.,math.radians(-angle))
         augmented_gknet_label[0] = x
         augmented_gknet_label[1] = y
         
-        
-        ##transform the image and mask with augmentation 
-        
-        ref_raw_labels = torch.tensor(ref_raw_labels) 
-        grasps_ref = torch.tensor(grasps_ref) 
         '''
         if self.crop == False :
             grasps_ref = grasps_ref * 224/1024
         '''
             
-        target_imgs = torch.stack(target_imgs)
-
         data_dict = {}
         data_dict['img_grasp'] = torch.tensor(gknet_label) 
         data_dict['img'] = img
