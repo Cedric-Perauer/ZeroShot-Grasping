@@ -29,10 +29,12 @@ class GraspTransformer(nn.Module):
             self.tokenw = 16
             self.tokenh = 16 
             self.vision_layer = VisionLayer(384*len(self.feature_layers),self.nc,self.tokenw,self.tokenh)
+            
+            ##freeze dino layers
             for param in self.dinov2d_backbone.parameters(): 
                 param.requires_grad = False
             
-            self.input_dim = 4 + 2 * self.tokenw * self.tokenh * self.nc
+            self.input_dim = 5 + 2 * self.tokenw * self.tokenh * self.nc
             
             self.mlp_head = nn.Sequential(
                     nn.Linear(self.input_dim,128),
@@ -61,7 +63,7 @@ class GraspTransformer(nn.Module):
             pred = torch.argmax(output)
             return pred, features_query[pred], features_ref[0] 
         
-        def forward(self,feats_ref,feats_query,query_label=None):
+        def forward_inference(self,feats_ref,feats_query,query_label=None):
             '''
             Input the ref and query image and the query grasping labels
             1) Get dinov2 feature encoding of query and ref
@@ -78,6 +80,22 @@ class GraspTransformer(nn.Module):
             mlp_forward = self.mlp_head(ml_input)
             x,y,theta,w = mlp_forward[:,0], mlp_forward[:,1], mlp_forward[:,2], mlp_forward[:,3]
             return x,y,theta,w 
+            
+        def forward(self,img, img_augmented,grasp_label):     
+            '''
+            forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
+            this feature vector is then feed through an MLP to get the grasp position in the augmented image 
+            '''
+            img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+            augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
+            img_feats = self.vision_layer(img_feats).reshape(img.shape[0],-1)
+            augmented_feats = self.vision_layer(augmented_feats).reshape(img.shape[0],-1)
+            #import pdb; pdb.set_trace()
+            ml_input = torch.cat([img_feats,augmented_feats,grasp_label],dim=-1)
+            mlp_forward = self.mlp_head(ml_input)
+            center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+            
+            return center,theta_cos,theta_sin,w
             
             
             

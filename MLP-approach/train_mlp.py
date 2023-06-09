@@ -40,7 +40,7 @@ parser.add_argument('--num_workers', type=int, default=4,
 parser.add_argument('--num_plot_examples_per_batch', type=int, default=1,
                     help='How many plots to make per batch')
 # Model parameters
-parser.add_argument('--batch_size', type=int, default=1)
+parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--num_samples_per_class', type=int, default=100, 
                     help='Number of examples to test on per category')
 parser.add_argument('--num_correspondences', type=int, default=50, 
@@ -148,6 +148,7 @@ folder_name = 'crops/'
 pretrain_path = pretrain_paths[args.patch_size]
 
 model = GraspTransformer()
+model = model.to(device)
 
 categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handbag",
               "hydrant", "keyboard", "laptop", "motorcycle", "mouse", "remote", 
@@ -164,9 +165,12 @@ vis_dir = 'vis_out/'
 
 os.makedirs(vis_dir, exist_ok=True)
 
+optim = torch.optim.Adam(model.parameters(), lr=1e-3)
+loss = torch.nn.MSELoss()
 
+epochs = 20 
 
-for category in ["Jacquard"] :
+for epoch in range(epochs) :
     
     dataloader = DataLoader(dataset, batch_size = args.batch_size,num_workers=0,shuffle=False)
     categories = dataset.classes
@@ -178,46 +182,79 @@ for category in ["Jacquard"] :
         gknet_label = data['img_grasp']
         augmented_gknet_label = data['img_augmented_grasp']
         batch_size = img.shape[0]
+        points_grasp = data['points_grasp']
         
         ##for the visualisation of the grasp 
         VIS = True
         if VIS : 
             for i in range(batch_size):
-                w = augmented_gknet_label[i][3]
-                x,y = augmented_gknet_label[i][0], augmented_gknet_label[i][1]
-                angle = augmented_gknet_label[i][2]
-                lx,ly = x - w/2, y
-                rx,ry = x + w/2, y 
-                lx,ly = dataset.rotated_about(lx,ly,x,y,math.radians(angle))
-                rx,ry = dataset.rotated_about(rx,ry,x,y,math.radians(angle))
+                w = augmented_gknet_label[i][4] * 224
+                x,y = augmented_gknet_label[i][0] * 224 , augmented_gknet_label[i][1] * 224
+                angle = math.atan2(augmented_gknet_label[i][3],augmented_gknet_label[i][2])
+                #angle = math.radians(augmented_gknet_label[i][5])
+                lx,ly = x - w/2., y
+                rx,ry = x + w/2., y 
+                lx,ly = dataset.rotated_about(lx,ly,x,y,angle)
+                rx,ry = dataset.rotated_about(rx,ry,x,y,angle)
                 
-                w = gknet_label[i][3]
-                xt,yt = gknet_label[i][0], gknet_label[i][1]
-                angle = gknet_label[i][2]
-                lxt,lyt = xt - w/2, yt
-                rxt,ryt = xt + w/2, yt 
-                lxt,lyt = dataset.rotated_about(lxt,lyt,xt,yt,math.radians(angle))
-                rxt,ryt = dataset.rotated_about(rxt,ryt,xt,yt,math.radians(angle))
+                w = gknet_label[i][4] * 224
+                xt,yt = gknet_label[i][0] , gknet_label[i][1] * 224
+                angle = math.atan2(gknet_label[i][3],gknet_label[i][2])
+                #angle = math.radians(gknet_label[i][5])
+                lxt,lyt = xt - w/2., yt
+                rxt,ryt = xt + w/2., yt 
+                lxt,lyt = dataset.rotated_about(lxt,lyt,xt,yt,angle)
+                rxt,ryt = dataset.rotated_about(rxt,ryt,xt,yt,angle)
             
                 save_name = 'vis_out/' + str(idx_plot) 
                 fig, axs = plt.subplot_mosaic([['A', 'B']],
                                                     figsize=(10,5))
+                
+                
                 axs['A'].set_title('Normal image')
                 axs['B'].set_title('Augmented image')
                 axs['A'].imshow(denorm_torch_to_pil(img[i]))
                 axs['A'].scatter([lxt],[lyt],color='red',s=3)
                 axs['A'].scatter([rxt],[ryt],color='green',s=3)
                 axs['A'].scatter([xt],[yt],color='cyan',s=3)
+                axs['A'].scatter([points_grasp[i][0,0]],[points_grasp[i][0,1]],color='blue',s=3)
+                axs['A'].scatter([points_grasp[i][1,0]],[points_grasp[i][1,1]],color='blue',s=3)
                 
                 axs['B'].imshow(denorm_torch_to_pil(augmented_img[i]))
-                axs['B'].scatter([lx],[ly],color='cyan',s=3)
-                axs['B'].scatter([rx],[ry],color='cyan',s=3)
+                axs['B'].scatter([lx],[ly],color='red',s=3)
+                axs['B'].scatter([rx],[ry],color='green',s=3)
                 axs['B'].scatter([x],[y],color='cyan',s=3)
                 plt.tight_layout()
                 plt.savefig(save_name + '.png', dpi=150)
                 plt.close('all')
                 idx_plot = idx_plot + 1
         
+        gknet_label = gknet_label.to(device)
+        augmented_gknet_label = augmented_gknet_label.to(device)
+        img = img.to(device)
+        augmented_img = augmented_img.to(device)
+        
+        center,theta_cos,theta_sin,w = model(img,augmented_img,gknet_label)
+        
+        centergt,theta_cosgt,theta_singt,wgt = augmented_gknet_label[:,:2], augmented_gknet_label[:,2],\
+                                                augmented_gknet_label[:,3], augmented_gknet_label[:,4]
+        
+        optim.zero_grad()
+
+        center_loss = loss(center,centergt)
+        cos_loss = loss(theta_cos,theta_cosgt)
+        sin_loss = loss(theta_sin,theta_singt)
+        w_loss = loss(w,wgt)
+        total_loss = center_loss + cos_loss + sin_loss + w_loss
+        total_loss = total_loss / batch_size
+        print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 
+        print("Center loss", (center_loss/batch_size)) 
+        print("Width Loss", w_loss/batch_size)
+        print("Loss",total_loss)
+        ##add wandb logging here
+        total_loss.backward()
+        optim.step()
+        break ##Just overfit first batch 
         
         
         '''

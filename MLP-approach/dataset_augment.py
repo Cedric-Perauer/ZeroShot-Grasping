@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 # Typing
 import math 
 from typing import List
+import random 
 
 co3d_root = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/co3d/'
 label_dir = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/data/class_labels/'
@@ -492,14 +493,23 @@ class AugmentDataset(Dataset):
         mask = self.transform_tensor(mask)
         
         
-        angle = 10 
+        angle = random.randint(-180, 180)
         augmented_img = augment_image(img,angle)
         augmented_gknet_label = gknet_label.copy()  
-        augmented_gknet_label[2] = augmented_gknet_label[2] - angle #just change the angle of the label here
+        augmented_angle = augmented_gknet_label[2] - angle #just change the angle of the label here
         x,y = self.rotated_about(augmented_gknet_label[0],augmented_gknet_label[1],224/2.,224/2.,math.radians(-angle))
-        augmented_gknet_label[0] = x
-        augmented_gknet_label[1] = y
         
+        #normalize and create angle labels 
+        x = x / 224.
+        y = y / 224.
+        angle_cos = math.cos(math.radians(augmented_angle))
+        angle_sin = math.sin(math.radians(augmented_angle))
+        w = augmented_gknet_label[3] / 224.
+        augmented_gknet_label = torch.tensor([x,y,angle_cos,angle_sin,w])
+        
+        # 
+        xt,yt,angle_label,wt = gknet_label
+        gknet_label = [xt/224.,yt/224.,math.cos(math.radians(angle)),math.sin(math.radians(angle)),wt/224.]
         '''
         if self.crop == False :
             grasps_ref = grasps_ref * 224/1024
@@ -508,6 +518,7 @@ class AugmentDataset(Dataset):
         data_dict = {}
         data_dict['img_grasp'] = torch.tensor(gknet_label) 
         data_dict['img'] = img
+        data_dict['points_grasp'] = torch.tensor(points_grasps)
         data_dict['img_augmented'] = augmented_img  
         data_dict['img_augmented_grasp'] = torch.tensor(augmented_gknet_label) 
         
