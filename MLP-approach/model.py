@@ -25,7 +25,7 @@ class GraspTransformer(nn.Module):
             #vit14s had 11 layers max
             self.dinov2d_backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
             ##freeze the dino layers
-            self.nc = 4
+            self.nc = 16
             self.tokenw = 16
             self.tokenh = 16 
             self.vision_layer = VisionLayer(384*len(self.feature_layers),self.nc,self.tokenw,self.tokenh)

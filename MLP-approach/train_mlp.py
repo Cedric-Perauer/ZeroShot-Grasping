@@ -168,7 +168,7 @@ os.makedirs(vis_dir, exist_ok=True)
 optim = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss = torch.nn.MSELoss()
 
-epochs = 20 
+epochs = 100
 
 for epoch in range(epochs) :
     
@@ -247,6 +247,7 @@ for epoch in range(epochs) :
         w_loss = loss(w,wgt)
         total_loss = center_loss + cos_loss + sin_loss + w_loss
         total_loss = total_loss / batch_size
+        print("--------- Epoch {} ---------".format(epoch))
         print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 
         print("Center loss", (center_loss/batch_size)) 
         print("Width Loss", w_loss/batch_size)
