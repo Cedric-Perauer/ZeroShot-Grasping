@@ -36,9 +36,10 @@ class AugmentDataset(Dataset):
     
     def __init__(self,dataset_root=jacquard_root,
                  image_transform=None,
-                 num_targets=1,vis=False,crop=True):
+                 num_targets=1,vis=False,crop=True,overfit=False):
         self.dataset_root = dataset_root
         self.crop = crop
+        self.overfit= overfit
         self.border_size = 100
         self.image_transform = image_transform
         self.image_norm_mean = (0.485, 0.456, 0.406)
@@ -186,7 +187,10 @@ class AugmentDataset(Dataset):
                         cur_dict['crop_dims'] = cur_crop_dims
                         
                     self.items.append(cur_dict)
-    
+                    if self.overfit == True :
+                        #import pdb; pdb.set_trace() 
+                        return 
+                    
     def distance(self,ax, ay, bx, by):
         return math.sqrt((by - ay)**2 + (bx - ax)**2)
     
@@ -493,7 +497,8 @@ class AugmentDataset(Dataset):
         mask = self.transform_tensor(mask)
         
         
-        angle = random.randint(-180, 180)
+        #angle = random.randint(-180, 180)
+        angle = 20
         augmented_img = augment_image(img,angle)
         augmented_gknet_label = gknet_label.copy()  
         augmented_angle = augmented_gknet_label[2] - angle #just change the angle of the label here

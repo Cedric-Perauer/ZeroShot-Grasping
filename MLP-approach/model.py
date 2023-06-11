@@ -94,6 +94,11 @@ class GraspTransformer(nn.Module):
             ml_input = torch.cat([img_feats,augmented_feats,grasp_label],dim=-1)
             mlp_forward = self.mlp_head(ml_input)
             center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+            #import pdb; pdb.set_trace()
+            center = nn.Sigmoid()(center)
+            theta_cos = nn.Tanh()(theta_cos)
+            theta_sin = nn.Tanh()(theta_sin)
+            w = nn.Sigmoid()(w)
             
             return center,theta_cos,theta_sin,w
             

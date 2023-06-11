@@ -40,7 +40,7 @@ parser.add_argument('--num_workers', type=int, default=4,
 parser.add_argument('--num_plot_examples_per_batch', type=int, default=1,
                     help='How many plots to make per batch')
 # Model parameters
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=1)
 parser.add_argument('--num_samples_per_class', type=int, default=100, 
                     help='Number of examples to test on per category')
 parser.add_argument('--num_correspondences', type=int, default=50, 
@@ -158,7 +158,7 @@ idx_plot = 0
 image_transform = get_transform()
 CROP = False 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
-dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
+dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP,overfit=True)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'
@@ -245,17 +245,20 @@ for epoch in range(epochs) :
         cos_loss = loss(theta_cos,theta_cosgt)
         sin_loss = loss(theta_sin,theta_singt)
         w_loss = loss(w,wgt)
-        total_loss = center_loss + cos_loss + sin_loss + w_loss
+        total_loss = 10 * center_loss + 10 * cos_loss + 10 * sin_loss + w_loss
         total_loss = total_loss / batch_size
         print("--------- Epoch {} ---------".format(epoch))
         print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 
         print("Center loss", (center_loss/batch_size)) 
         print("Width Loss", w_loss/batch_size)
         print("Loss",total_loss)
+        #import pdb; pdb.set_trace()
+        print("GT ", centergt[0,0],centergt[0,1],theta_cosgt[0],theta_singt[0],wgt[0])
+        print("pred", center[0,0],center[0,1],theta_cos[0],theta_sin[0],w[0])
+        
         ##add wandb logging here
         total_loss.backward()
         optim.step()
-        break ##Just overfit first batch 
         
         
         '''
