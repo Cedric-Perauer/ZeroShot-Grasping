@@ -234,7 +234,7 @@ for epoch in range(epochs) :
         img = img.to(device)
         augmented_img = augmented_img.to(device)
         
-        center,theta_cos,theta_sin,w = model(img,augmented_img,gknet_label)
+        center,theta_cos,theta_sin,w = model.forward_similarity(img,augmented_img,gknet_label)
         
         centergt,theta_cosgt,theta_singt,wgt = augmented_gknet_label[:,:2], augmented_gknet_label[:,2],\
                                                 augmented_gknet_label[:,3], augmented_gknet_label[:,4]
@@ -245,7 +245,7 @@ for epoch in range(epochs) :
         cos_loss = loss(theta_cos,theta_cosgt)
         sin_loss = loss(theta_sin,theta_singt)
         w_loss = loss(w,wgt)
-        total_loss = 10 * center_loss + 10 * cos_loss + 10 * sin_loss + 10 * w_loss
+        total_loss = center_loss + cos_loss + sin_loss +  w_loss
         total_loss = total_loss / batch_size
         print("--------- Epoch {} ---------".format(epoch))
         print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 

@@ -28,18 +28,25 @@ class GraspTransformer(nn.Module):
             self.nc = 16
             self.tokenw = 16
             self.tokenh = 16 
-            self.vision_layer = VisionLayer(384*len(self.feature_layers),self.nc,self.tokenw,self.tokenh)
-            
+            self.vision_layer_naive = VisionLayer(384*len(self.feature_layers),self.nc,self.tokenw,self.tokenh)
+            self.vision_layer_similarity = VisionLayer(256,self.nc,self.tokenw,self.tokenh)
             ##freeze dino layers
             for param in self.dinov2d_backbone.parameters(): 
                 param.requires_grad = False
             
-            self.input_dim = 5 + 2 * self.tokenw * self.tokenh * self.nc
+            self.input_dim_naive = 5 + 2 * self.tokenw * self.tokenh * self.nc
+            self.input_dim_similarity = 5  + 16 * 16 * self.nc
             
-            self.mlp_head = nn.Sequential(
-                    nn.Linear(self.input_dim,128),
+            self.mlp_head_naive = nn.Sequential(
+                    nn.Linear(self.input_dim_naive,128),
                     nn.ReLU(),
                     nn.Linear(128, 5)
+                    )
+            
+            self.mlp_head_similarity = nn.Sequential(
+                    nn.Linear(self.input_dim_similarity,1024),
+                    nn.ReLU(),
+                    nn.Linear(1024, 5)
                     )
             
         def process_query_label(self,label_query):
@@ -81,7 +88,7 @@ class GraspTransformer(nn.Module):
             x,y,theta,w = mlp_forward[:,0], mlp_forward[:,1], mlp_forward[:,2], mlp_forward[:,3]
             return x,y,theta,w 
             
-        def forward(self,img, img_augmented,grasp_label):     
+        def forward_naive(self,img, img_augmented,grasp_label):     
             '''
             forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
             this feature vector is then feed through an MLP to get the grasp position in the augmented image 
@@ -89,10 +96,30 @@ class GraspTransformer(nn.Module):
             img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
             augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
             img_feats = self.vision_layer(img_feats).reshape(img.shape[0],-1)
-            augmented_feats = self.vision_layer(augmented_feats).reshape(img.shape[0],-1)
+            augmented_feats = self.vision_layer_naive(augmented_feats).reshape(img.shape[0],-1)
             #import pdb; pdb.set_trace()
             ml_input = torch.cat([img_feats,augmented_feats,grasp_label],dim=-1)
-            mlp_forward = self.mlp_head(ml_input)
+            mlp_forward = self.mlp_head_naive(ml_input)
+            center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+            #import pdb; pdb.set_trace()
+            center = nn.Sigmoid()(center)
+            #theta_cos = nn.Tanh()(theta_cos)
+            #theta_sin = nn.Tanh()(theta_sin)
+            w = nn.Sigmoid()(w)
+            
+            return center,theta_cos,theta_sin,w
+        
+        def forward_similarity(self,img, img_augmented,grasp_label):     
+            '''
+            forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
+            this feature vector is then feed through an MLP to get the grasp position in the augmented image 
+            '''
+            img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+            augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
+            similarity = torch.bmm(augmented_feats,torch.transpose(img_feats,1,2))
+            reduced_similarity = self.vision_layer_similarity(similarity).reshape(img.shape[0],-1)
+            ml_input = torch.cat([reduced_similarity,grasp_label],dim=-1)
+            mlp_forward = self.mlp_head_similarity(ml_input)
             center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
             #import pdb; pdb.set_trace()
             center = nn.Sigmoid()(center)

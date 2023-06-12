@@ -183,6 +183,7 @@ class AugmentDataset(Dataset):
                     cur_dict['mask_path'] = cur_mask
                     cur_dict['two_point_labels'] = cur_grasps[label_num]
                     cur_dict['gknet_labels'] = gknet_labels[label_num][:4]
+                    cur_dict['angle'] = random.randint(-180, 180)
                     if self.crop : 
                         cur_dict['crop_dims'] = cur_crop_dims
                         
@@ -498,7 +499,7 @@ class AugmentDataset(Dataset):
         
         
         #angle = random.randint(-180, 180)
-        angle = 20
+        angle = self.items[index]['angle']
         augmented_img = augment_image(img,angle)
         augmented_gknet_label = gknet_label.copy()  
         augmented_angle = augmented_gknet_label[2] - angle #just change the angle of the label here
