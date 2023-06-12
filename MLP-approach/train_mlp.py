@@ -245,7 +245,7 @@ for epoch in range(epochs) :
         cos_loss = loss(theta_cos,theta_cosgt)
         sin_loss = loss(theta_sin,theta_singt)
         w_loss = loss(w,wgt)
-        total_loss = 10 * center_loss + 10 * cos_loss + 10 * sin_loss + w_loss
+        total_loss = 10 * center_loss + 10 * cos_loss + 10 * sin_loss + 10 * w_loss
         total_loss = total_loss / batch_size
         print("--------- Epoch {} ---------".format(epoch))
         print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 
@@ -253,8 +253,10 @@ for epoch in range(epochs) :
         print("Width Loss", w_loss/batch_size)
         print("Loss",total_loss)
         #import pdb; pdb.set_trace()
-        print("GT ", centergt[0,0],centergt[0,1],theta_cosgt[0],theta_singt[0],wgt[0])
-        print("pred", center[0,0],center[0,1],theta_cos[0],theta_sin[0],w[0])
+        print("Center GT ", centergt[0,0],centergt[0,1],wgt[0])
+        print("Center pred", center[0,0],center[0,1],w[0])
+        print("Angle GT", theta_cosgt[0],theta_singt[0])
+        print("Angle pred", theta_cos[0],theta_sin[0])
         
         ##add wandb logging here
         total_loss.backward()

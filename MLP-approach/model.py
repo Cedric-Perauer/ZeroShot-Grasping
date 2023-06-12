@@ -96,8 +96,8 @@ class GraspTransformer(nn.Module):
             center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
             #import pdb; pdb.set_trace()
             center = nn.Sigmoid()(center)
-            theta_cos = nn.Tanh()(theta_cos)
-            theta_sin = nn.Tanh()(theta_sin)
+            #theta_cos = nn.Tanh()(theta_cos)
+            #theta_sin = nn.Tanh()(theta_sin)
             w = nn.Sigmoid()(w)
             
             return center,theta_cos,theta_sin,w
