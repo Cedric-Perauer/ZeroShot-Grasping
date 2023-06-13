@@ -25,8 +25,8 @@ import numpy as np
 from zsp.method.dense_descriptor_utils import (
     _log_bin, gaussian_blurring, extract_saliency_maps)
 from zsp.utils.project_utils import get_results_length
-
-# from pytorch3d.renderer.cameras import get_world_to_view_transform
+import dinov2.models.vision_transformer as vits2
+from pytorch3d.renderer.cameras import get_world_to_view_transform
 from pytorch3d.transforms import Rotate, Translate, Scale
 from skimage.measure import ransac
 
@@ -68,6 +68,8 @@ class DescriptorExtractor():
             self.stride = 4
             self.num_patches = 28
             self.padding = 2
+        elif self.patch_size == 14:
+            self.model_name = 'dinov2'
         else:
             raise ValueError('ViT models only supported with patch sizes 8 or 16')
 
@@ -88,18 +90,36 @@ class DescriptorExtractor():
 
 
     def load_model(self, pretrain_path, device):
-        model = vits.__dict__[self.model_name](patch_size=self.patch_size)
-        state_dict = torch.load(pretrain_path, map_location='cpu')
-        model.load_state_dict(state_dict)
-        model.to(device)
-        model.eval()
+        if self.model_name == "dinov2":
+            vit_kwargs = dict(
+                img_size=518,
+                patch_size=14,
+                init_values=1.0e-05,
+                ffn_layer="mlp",
+                block_chunks=0,
+                qkv_bias=True,
+                proj_bias=True,
+                ffn_bias=True,
+            )
 
-        if self.high_res: 
-            model.patch_embed.proj.stride = (self.stride, self.stride)
-            model.num_patches = self.num_patches ** 2
-            model.patch_embed.patch_size = self.stride
-            model.patch_embed.proj.padding = self.padding
-        self.model = model
+            model = vits2.__dict__["vit_base"](**vit_kwargs)
+            state_dict = torch.load(pretrain_path, map_location='cpu')
+            model.load_state_dict(state_dict)
+            model.to(device)
+            self.model = model
+        else:
+            model = vits.__dict__[self.model_name](patch_size=self.patch_size)
+            state_dict = torch.load(pretrain_path, map_location='cpu')
+            model.load_state_dict(state_dict)
+            model.to(device)
+            model.eval()
+
+            if self.high_res:
+                model.patch_embed.proj.stride = (self.stride, self.stride)
+                model.num_patches = self.num_patches ** 2
+                model.patch_embed.patch_size = self.stride
+                model.patch_embed.proj.padding = self.padding
+            self.model = model
 
 
     def extract_features_and_attn(self, all_images):
@@ -456,3 +476,4 @@ class ZeroShotPoseMethod():
         # trans21 = get_world_to_view_transform(torch.Tensor(R.T).unsqueeze(0), torch.tensor(t.T))
         trans21 = S_.compose(R_.compose(T_))
         return trans21
+        
