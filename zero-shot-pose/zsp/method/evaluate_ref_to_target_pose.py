@@ -153,7 +153,7 @@ categories = ["backpack", "bicycle", "book", "car", "chair", "hairdryer", "handb
 idx_plot = 0
 
 image_transform = desc.get_transform()
-CROP = True 
+CROP = False 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
 dataset.img_cnt = 0 
 
@@ -288,20 +288,23 @@ for category in ["Jacquard"] :
         out1 = all_points1[0][all_points1[0][:,0] != -1].numpy().reshape(-1,1,2).astype(np.float32)
         out2 = all_points2[0][all_points2[0][:,0] != -1].numpy().reshape(-1,1,2).astype(np.float32)
         
-        matrix, mask = cv2.findHomography(out1, out2, cv2.RANSAC, 5.0)
+        matrix, mask = cv2.findHomography(out2, out1, cv2.RANSAC, 5.0)
         # applying perspective algorithm
-        dst = cv2.perspectiveTransform(out1.reshape(1,-1,2), matrix)
+        dst = cv2.perspectiveTransform(out2.reshape(1,-1,2), matrix)
         
         ## the two grasping points
-        ref_pts = torch.Tensor(ref_gripper_pts)
-        ref_pts = ref_pts.numpy().reshape(1,-1,2).astype(np.float32)
-        ref_pts[:,:,0], ref_pts[:,:,1] = ref_pts[:,:,1].copy(), ref_pts[:,:,0].copy()
-        new_pts = cv2.perspectiveTransform(ref_pts, matrix).reshape(-1,2,2)
+        #import pdb; pdb.set_trace()
+        target_pts = torch.Tensor(target_gripper_pts[best_idxs[0]])
+        target_pts = target_pts.numpy().reshape(1,-1,2).astype(np.float32)
+        target_pts[:,:,0], target_pts[:,:,1] = target_pts[:,:,1].copy(), target_pts[:,:,0].copy()
+        new_pts = cv2.perspectiveTransform(target_pts, matrix).reshape(-1,2,2)
         
         #switch x,y axes as this is the order in the correspondence points
-        grasps_new = grasps_ref.numpy().copy()
-        grasps_new[0][:,:,0] = grasps_ref[0][:,:,1]
-        grasps_new[0][:,:,1] = grasps_ref[0][:,:,0]
+        grasps_new = grasps_target[best_idxs[0]].numpy().copy()
+        #grasps_new = grasps_ref.numpy().copy()
+        #import pdb; pdb.set_trace()
+        grasps_new[0][:,:,0] = grasps_target[best_idxs[0]][0][:,:,1]
+        grasps_new[0][:,:,1] = grasps_target[best_idxs[0]][0][:,:,0]
         
         #import pdb; pdb.set_trace()
         grasp_new = rotate_grasping_rectangle(grasps_new,matrix)
@@ -395,7 +398,7 @@ for category in ["Jacquard"] :
                                         new_pts,store_dir=vis_dir,dims=target_dims[best_idxs[i]],dims_ref=ref_dims)
                 else : 
                     dataset.visualize_imgs(target_path[best_idxs[i]][0],target_raw_labels[best_idxs[i]],
-                                        grasp_new,ref_raw_labels,ref_path,dst,centers_new,
+                                        grasp_new,ref_raw_labels[0],ref_path,dst,centers_new,
                                         new_pts,store_dir=vis_dir)
                         
                 #points = np.array([bl,tl,tr,br])

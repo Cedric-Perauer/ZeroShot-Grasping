@@ -22,13 +22,14 @@ from typing import List
 co3d_root = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/co3d/'
 label_dir = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/data/class_labels/'
 jacquard_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Jacquard/Samples/'
+gk_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Jacquard/Samples/'
 
 class TestDataset(Dataset):
     '''
     very simple dataloader to test some stuff on Jacquard samples dataset
     '''
     
-    def __init__(self,dataset_root=jacquard_root,
+    def __init__(self,dataset_root=gk_root,
                  image_transform=None,
                  num_targets=1,vis=False,crop=True):
         self.dataset_root = dataset_root
@@ -306,11 +307,7 @@ class TestDataset(Dataset):
                 g[4] = g[4] * (dims_ref[3] - dims_ref[2] + 2 * self.border_size) /224.
             
             ref_grasps.append(g)
-        
-        try : 
-            grasp_vis_ref, _, grasp_pts_ref = self.create_grasp_rectangle(ref_grasps)
-        except : 
-            import pdb; pdb.set_trace()
+        grasp_vis_ref, _, grasp_pts_ref = self.create_grasp_rectangle(ref_grasps)
         
         try : 
             img3 = cv2.imread(img_ref)
@@ -319,7 +316,7 @@ class TestDataset(Dataset):
         if self.crop :
             img = img[int(dims[2]) -self.border_size:int(dims[3]) + self.border_size,int(dims[0]) - self.border_size:int(dims[1]) + self.border_size,:]
             img3 = img3[int(dims_ref[2]) -self.border_size:int(dims_ref[3]) + self.border_size,int(dims_ref[0]) - self.border_size:int(dims_ref[1]) + self.border_size,:]
-        img2 = img3.copy()
+        img2 = img.copy()
         #draw = ImageDraw.Draw(img)
         for n,el in enumerate(grasp_vis) : 
             #import pdb; pdb.set_trace()
@@ -489,7 +486,7 @@ class TestDataset(Dataset):
                 img_crop = target_imgss[i].crop((left.item(),  top.item(), right.item(), bottom.item()))
                 mask_target.append(self.transform_tensor(mask_crop))
                 target_imgs.append(self.image_transform(img_crop))
-             
+        
         else : 
             mask_target = [self.transform_tensor(i) for i in mask_targets]
             target_imgs = [self.image_transform(i) for i in target_imgss]
