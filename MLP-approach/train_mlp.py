@@ -18,6 +18,9 @@ from einops import repeat
 from dataset_reference import TestDataset
 from dataset_augment import AugmentDataset
 from model import GraspTransformer
+from torch.utils.tensorboard import SummaryWriter
+
+writer = SummaryWriter()
 
 LOG_DIR = 'logs/'
 parser = argparse.ArgumentParser()
@@ -40,7 +43,7 @@ parser.add_argument('--num_workers', type=int, default=4,
 parser.add_argument('--num_plot_examples_per_batch', type=int, default=1,
                     help='How many plots to make per batch')
 # Model parameters
-parser.add_argument('--batch_size', type=int, default=1)
+parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--num_samples_per_class', type=int, default=100, 
                     help='Number of examples to test on per category')
 parser.add_argument('--num_correspondences', type=int, default=50, 
@@ -140,8 +143,9 @@ log_dir = os.path.join(log_dir,
                        f"{args.num_correspondences}corr_{kmeans_str}_{args.binning}bin_{args.ransac_thresh}ransac_{args.n_target}tgt_{note}")
 
 folder_name = 'crops/'
+folder_checkpoint = 'checkpoints/'
 
-
+os.makedirs(folder_checkpoint, exist_ok=True)
 # ---------------
 # LOAD MODEL
 # ---------------
@@ -158,7 +162,7 @@ idx_plot = 0
 image_transform = get_transform()
 CROP = False 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
-dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP,overfit=True)
+dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP,overfit=False)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'
@@ -168,8 +172,8 @@ os.makedirs(vis_dir, exist_ok=True)
 optim = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss = torch.nn.MSELoss()
 
-epochs = 100
-
+epochs = 200
+n_iter = 0 
 for epoch in range(epochs) :
     
     dataloader = DataLoader(dataset, batch_size = args.batch_size,num_workers=0,shuffle=False)
@@ -185,7 +189,7 @@ for epoch in range(epochs) :
         points_grasp = data['points_grasp']
         
         ##for the visualisation of the grasp 
-        VIS = True
+        VIS = False
         if VIS : 
             for i in range(batch_size):
                 w = augmented_gknet_label[i][4] * 224
@@ -245,46 +249,54 @@ for epoch in range(epochs) :
         cos_loss = loss(theta_cos,theta_cosgt)
         sin_loss = loss(theta_sin,theta_singt)
         w_loss = loss(w,wgt)
-        total_loss = center_loss + cos_loss + sin_loss +  w_loss
+        total_loss = center_loss + cos_loss * 5 + sin_loss * 5 +  w_loss
         total_loss = total_loss / batch_size
         print("--------- Epoch {} ---------".format(epoch))
         print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 
         print("Center loss", (center_loss/batch_size)) 
         print("Width Loss", w_loss/batch_size)
         print("Loss",total_loss)
+        
+        writer.add_scalar('Loss/train',total_loss , n_iter)
+        writer.add_scalar('AngleLoss/train', (cos_loss + sin_loss)/batch_size, n_iter)
+        writer.add_scalar('CenterLoss/train',center_loss/batch_size , n_iter)
+        writer.add_scalar('WidthLoss/train',w_loss/batch_size , n_iter)
+        n_iter += 1
         #import pdb; pdb.set_trace()
-        print("Center GT ", centergt[0,0],centergt[0,1],wgt[0])
-        print("Center pred", center[0,0],center[0,1],w[0])
-        print("Angle GT", theta_cosgt[0],theta_singt[0])
-        print("Angle pred", theta_cos[0],theta_sin[0])
+        #print("Center GT ", centergt[0,0],centergt[0,1],wgt[0])
+        #print("Center pred", center[0,0],center[0,1],w[0])
+        #print("Angle GT", theta_cosgt[0],theta_singt[0])
+        #print("Angle pred", theta_cos[0],theta_sin[0])
         
         ##add wandb logging here
         total_loss.backward()
         optim.step()
-        
-        
-        '''
-        relevant for inference later
-        best_idx, query_feats, ref_feats = model.select_best_views(all_target_images[0],ref_image)
-        ref_raw_labels = ref_raw_labels[:,:,:4] #remove the last column (h) 
-        target_grasp = target_raw_labels[best_idx][:,:,:4]
-        #import pdb; pdb.set_trace()
-        x,y,theta,w = model(query_feats,ref_feats)
-        #import pdb;pdb.set_trace()
-        
-        save_name = 'vis_out/' + str(idx_plot) 
-        fig, axs = plt.subplot_mosaic([['A', 'B']],
-                                            figsize=(10,5))
-        axs['A'].set_title('Reference image')
-        axs['B'].set_title('Query images')
-        axs['A'].imshow(denorm_torch_to_pil(ref_image[0]))
-        tgt_pils = [denorm_torch_to_pil(
-                    all_target_images[0][j]) for j in range(all_target_images[0].shape[0])]
-        tgt_pils = tile_ims_horizontal_highlight_best(tgt_pils, highlight_idx=best_idx)
-        axs['B'].imshow(tgt_pils)
-        plt.tight_layout()
-        plt.savefig(save_name + '.png', dpi=150)
-        plt.close('all')
-        idx_plot = idx_plot + 1
-        '''
+    
+    
+    torch.save(model.state_dict(),folder_checkpoint + 'model_similarity_epoch{}.pt'.format(epoch))
+    '''
+    relevant for inference later
+    best_idx, query_feats, ref_feats = model.select_best_views(all_target_images[0],ref_image)
+    ref_raw_labels = ref_raw_labels[:,:,:4] #remove the last column (h) 
+    target_grasp = target_raw_labels[best_idx][:,:,:4]
+    #import pdb; pdb.set_trace()
+    x,y,theta,w = model(query_feats,ref_feats)
+    #import pdb;pdb.set_trace()
+    
+    save_name = 'vis_out/' + str(idx_plot) 
+    fig, axs = plt.subplot_mosaic([['A', 'B']],
+                                        figsize=(10,5))
+    axs['A'].set_title('Reference image')
+    axs['B'].set_title('Query images')
+    axs['A'].imshow(denorm_torch_to_pil(ref_image[0]))
+    tgt_pils = [denorm_torch_to_pil(
+                all_target_images[0][j]) for j in range(all_target_images[0].shape[0])]
+    tgt_pils = tile_ims_horizontal_highlight_best(tgt_pils, highlight_idx=best_idx)
+    axs['B'].imshow(tgt_pils)
+    plt.tight_layout()
+    plt.savefig(save_name + '.png', dpi=150)
+    plt.close('all')
+    idx_plot = idx_plot + 1
+    '''
+    
         
