@@ -161,13 +161,21 @@ idx_plot = 0
 
 image_transform = get_transform()
 CROP = False 
+TRAIN_VIS = True
+vis_every = 30 #vis one train sample every 30 interations 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
 dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP,overfit=False)
 dataset.img_cnt = 0 
 
-vis_dir = 'vis_out/'
+vis_dir = 'vis_out/'  #to look at the labels
+train_vis_dir =  'train_vis/' #for labels and prediction visualisation 
+train_plots = 0 #counter to vis predictions 
+
+if os.path.exists(train_vis_dir): 
+    shutil.rmtree(train_vis_dir)
 
 os.makedirs(vis_dir, exist_ok=True)
+os.makedirs(train_vis_dir, exist_ok=True)
 
 optim = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss = torch.nn.MSELoss()
@@ -210,7 +218,7 @@ for epoch in range(epochs) :
                 lxt,lyt = dataset.rotated_about(lxt,lyt,xt,yt,angle)
                 rxt,ryt = dataset.rotated_about(rxt,ryt,xt,yt,angle)
             
-                save_name = 'vis_out/' + str(idx_plot) 
+                save_name = vis_dir + str(idx_plot) 
                 fig, axs = plt.subplot_mosaic([['A', 'B']],
                                                     figsize=(10,5))
                 
@@ -238,17 +246,17 @@ for epoch in range(epochs) :
         img = img.to(device)
         augmented_img = augmented_img.to(device)
         
-        center,theta_cos,theta_sin,w = model.forward_similarity(img,augmented_img,gknet_label)
+        center_pred,theta_cos_pred,theta_sin_pred,w_pred = model.forward_similarity(img,augmented_img,gknet_label)
         
         centergt,theta_cosgt,theta_singt,wgt = augmented_gknet_label[:,:2], augmented_gknet_label[:,2],\
                                                 augmented_gknet_label[:,3], augmented_gknet_label[:,4]
         
         optim.zero_grad()
 
-        center_loss = loss(center,centergt)
-        cos_loss = loss(theta_cos,theta_cosgt)
-        sin_loss = loss(theta_sin,theta_singt)
-        w_loss = loss(w,wgt)
+        center_loss = loss(center_pred,centergt)
+        cos_loss = loss(theta_cos_pred,theta_cosgt)
+        sin_loss = loss(theta_sin_pred,theta_singt)
+        w_loss = loss(w_pred,wgt)
         total_loss = center_loss + cos_loss * 5 + sin_loss * 5 +  w_loss
         total_loss = total_loss / batch_size
         print("--------- Epoch {} ---------".format(epoch))
@@ -262,6 +270,47 @@ for epoch in range(epochs) :
         writer.add_scalar('CenterLoss/train',center_loss/batch_size , n_iter)
         writer.add_scalar('WidthLoss/train',w_loss/batch_size , n_iter)
         n_iter += 1
+        
+        if TRAIN_VIS and n_iter % vis_every == 0 :
+            i = 0 
+            w = augmented_gknet_label[i][4] * 224
+            x,y = augmented_gknet_label[i][0] * 224 , augmented_gknet_label[i][1] * 224
+            angle = math.atan2(augmented_gknet_label[i][3],augmented_gknet_label[i][2])
+            #angle = math.radians(augmented_gknet_label[i][5])
+            lx,ly = x - w/2., y
+            rx,ry = x + w/2., y 
+            lx,ly = dataset.rotated_about(lx,ly,x,y,angle)
+            rx,ry = dataset.rotated_about(rx,ry,x,y,angle)
+            
+            wp = w_pred[i] * 224
+            xt,yt = center_pred[i][0] * 224, center_pred[i][1] * 224
+            angle = math.atan2(theta_sin_pred[i],theta_cos_pred[i])
+            #angle = math.radians(gknet_label[i][5])
+            lxt,lyt = xt - wp/2., yt
+            rxt,ryt = xt + wp/2., yt 
+            lxt,lyt = dataset.rotated_about(lxt,lyt,xt,yt,angle)
+            rxt,ryt = dataset.rotated_about(rxt,ryt,xt,yt,angle)
+        
+            save_name = train_vis_dir + str(train_plots) 
+            fig, axs = plt.subplot_mosaic([['A', 'B']],
+                                                figsize=(10,5))
+            axs['A'].set_title('Augmented image Preds')
+            axs['B'].set_title('Augmented image GT')
+            axs['A'].imshow(denorm_torch_to_pil(augmented_img[i].cpu()))
+            axs['A'].scatter([lxt],[lyt],color='red',s=3)
+            axs['A'].scatter([rxt],[ryt],color='green',s=3)
+            axs['A'].scatter([xt.cpu().detach()],[yt.cpu().detach()],color='cyan',s=3)
+            #axs['A'].scatter([points_grasp[i][0,0]],[points_grasp[i][0,1]],color='blue',s=3)
+            #axs['A'].scatter([points_grasp[i][1,0]],[points_grasp[i][1,1]],color='blue',s=3)
+            
+            axs['B'].imshow(denorm_torch_to_pil(augmented_img[i].cpu()))
+            axs['B'].scatter([lx],[ly],color='red',s=3)
+            axs['B'].scatter([rx],[ry],color='green',s=3)
+            axs['B'].scatter([x.cpu().detach()],[y.cpu().detach()],color='cyan',s=3)
+            plt.tight_layout()
+            plt.savefig(save_name + '.png', dpi=150)
+            plt.close('all')
+            train_plots = train_plots + 1
         #import pdb; pdb.set_trace()
         #print("Center GT ", centergt[0,0],centergt[0,1],wgt[0])
         #print("Center pred", center[0,0],center[0,1],w[0])
