@@ -18,9 +18,13 @@ class VisionLayer(nn.Module):
 
 class GraspTransformer(nn.Module):
     
-        def __init__(self,feature_layers=[11]):
+        def __init__(self,feature_layers=[11],angle_mode=False):
             super(GraspTransformer,self).__init__()
-            
+            '''
+            angle_mode = True : uses the angle representation (x,y,theta_cos,theta_sin,w)
+            angle_mode = False : uses the grasp point representation (xl,yl,xr,yr)
+            '''
+            self.angle_mode = angle_mode
             self.feature_layers = feature_layers
             #vit14s had 11 layers max
             self.dinov2d_backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
@@ -34,20 +38,22 @@ class GraspTransformer(nn.Module):
             for param in self.dinov2d_backbone.parameters(): 
                 param.requires_grad = False
             
-            self.input_dim_naive = 5 + 2 * self.tokenw * self.tokenh * self.nc
-            self.input_dim_similarity = 5  + 16 * 16 * self.nc
+            self.out_params = 5 if self.angle_mode else 4
+            
+            self.input_dim_naive = self.out_params + 2 * self.tokenw * self.tokenh * self.nc
+            self.input_dim_similarity = self.out_params  + 16 * 16 * self.nc
             
             self.mlp_head_naive = nn.Sequential(
                     nn.Linear(self.input_dim_naive,128),
                     nn.ReLU(),
-                    nn.Linear(128, 5)
+                    nn.Linear(128, self.out_params)
                     )
             
             self.mlp_head_similarity = nn.Sequential(
-                    nn.Linear(self.input_dim_similarity,1024),
-                    nn.ReLU(),
-                    nn.Linear(1024, 5)
-                    )
+                        nn.Linear(self.input_dim_similarity,1024),
+                        nn.ReLU(),
+                        nn.Linear(1024, self.out_params)
+                        )
             
         def process_query_label(self,label_query):
             pass #tbd grasp transformation of the query label into GK Net representation 
@@ -100,15 +106,18 @@ class GraspTransformer(nn.Module):
             #import pdb; pdb.set_trace()
             ml_input = torch.cat([img_feats,augmented_feats,grasp_label],dim=-1)
             mlp_forward = self.mlp_head_naive(ml_input)
-            center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
-            #import pdb; pdb.set_trace()
-            center = nn.Sigmoid()(center)
-            #theta_cos = nn.Tanh()(theta_cos)
-            #theta_sin = nn.Tanh()(theta_sin)
-            w = nn.Sigmoid()(w)
+            if self.angle_mode == True : 
+                center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+                center = nn.Sigmoid()(center)
+                #theta_cos = nn.Tanh()(theta_cos)
+                #theta_sin = nn.Tanh()(theta_sin)
+                w = nn.Sigmoid()(w)
+                return center,theta_cos,theta_sin,w
+            else : 
+                point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
+                point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
+                return point_left, point_right 
             
-            return center,theta_cos,theta_sin,w
-        
         def forward_similarity(self,img, img_augmented,grasp_label):     
             '''
             forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
@@ -120,14 +129,17 @@ class GraspTransformer(nn.Module):
             reduced_similarity = self.vision_layer_similarity(similarity).reshape(img.shape[0],-1)
             ml_input = torch.cat([reduced_similarity,grasp_label],dim=-1)
             mlp_forward = self.mlp_head_similarity(ml_input)
-            center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
-            #import pdb; pdb.set_trace()
-            center = nn.Sigmoid()(center)
-            #theta_cos = nn.Tanh()(theta_cos)
-            #theta_sin = nn.Tanh()(theta_sin)
-            w = nn.Sigmoid()(w)
-            
-            return center,theta_cos,theta_sin,w
+            if self.angle_mode == True : 
+                center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+                center = nn.Sigmoid()(center)
+                #theta_cos = nn.Tanh()(theta_cos)
+                #theta_sin = nn.Tanh()(theta_sin)
+                w = nn.Sigmoid()(w)
+                return center,theta_cos,theta_sin,w
+            else : 
+                point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
+                #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
+                return point_left, point_right 
             
             
             

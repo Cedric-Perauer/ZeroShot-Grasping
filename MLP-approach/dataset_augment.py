@@ -54,7 +54,9 @@ class AugmentDataset(Dataset):
                                                     transforms.ToTensor()])
         
         
-        for cat in self.classes :
+        for num_c,cat in enumerate(self.classes) :
+            if num_c ==0 : 
+                continue
             if os.path.isdir(self.dataset_root + cat) == False:
                 continue
             cur_dict = {}
@@ -109,6 +111,7 @@ class AugmentDataset(Dataset):
                         grasping_labels.append(grasps)
                         gripper_labels.append(gripper_points)
                         out_grasps.append(grasp)
+
                 
                     
                         
@@ -503,28 +506,33 @@ class AugmentDataset(Dataset):
         augmented_img = augment_image(img,angle)
         augmented_gknet_label = gknet_label.copy()  
         augmented_angle = augmented_gknet_label[2] - angle #just change the angle of the label here
-        x,y = self.rotated_about(augmented_gknet_label[0],augmented_gknet_label[1],224/2.,224/2.,math.radians(-angle))
+        xr,yr = self.rotated_about(augmented_gknet_label[0],augmented_gknet_label[1],224/2.,224/2.,math.radians(-angle))
         
         #normalize and create angle labels 
-        x = x / 224.
-        y = y / 224.
+        x = xr / 224.
+        y = yr / 224.
         angle_cos = math.cos(math.radians(augmented_angle))
         angle_sin = math.sin(math.radians(augmented_angle))
+        wr = augmented_gknet_label[3]
         w = augmented_gknet_label[3] / 224.
         augmented_gknet_label = torch.tensor([x,y,angle_cos,angle_sin,w])
-        
-        # 
+
         xt,yt,angle_label,wt = gknet_label
-        gknet_label = [xt/224.,yt/224.,math.cos(math.radians(angle)),math.sin(math.radians(angle)),wt/224.]
+        gknet_label = [xt/224.,yt/224.,math.cos(math.radians(angle_label)),math.sin(math.radians(angle_label)),wt/224.]
         '''
         if self.crop == False :
             grasps_ref = grasps_ref * 224/1024
         '''
-            
+        lxt,lyt = xr - wr/2., yr
+        rxt,ryt = xr + wr/2., yr
+        rxt,ryt = self.rotated_about(rxt,ryt,float(xr),float(yr),math.radians(augmented_angle))
+        lxt,lyt = self.rotated_about(lxt,lyt,float(xr),float(yr),math.radians(augmented_angle))
         data_dict = {}
         data_dict['img_grasp'] = torch.tensor(gknet_label) 
         data_dict['img'] = img
         data_dict['points_grasp'] = torch.tensor(points_grasps)
+        
+        data_dict['points_grasp_augmented'] = torch.tensor([[lxt,lyt],[rxt,ryt]])
         data_dict['img_augmented'] = augmented_img  
         data_dict['img_augmented_grasp'] = torch.tensor(augmented_gknet_label) 
         
