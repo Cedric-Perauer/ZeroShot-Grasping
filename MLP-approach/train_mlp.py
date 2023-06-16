@@ -161,7 +161,8 @@ idx_plot = 0
 image_transform = get_transform()
 CROP = False 
 TRAIN_VIS = True
-ANGLE_MODE = True 
+ANGLE_MODE = False
+SIM =  False 
 '''
 angle_mode = True : uses the angle representation (x,y,theta_cos,theta_sin,w)
 angle_mode = False : uses the grasp point representation (xl,yl,xr,yr)
@@ -175,10 +176,8 @@ model = GraspTransformer(angle_mode=ANGLE_MODE)
 model = model.to(device)
 
 
-            
- 
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
-dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP,overfit=False)
+dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP,overfit=True)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'  #to look at the labels
@@ -264,13 +263,18 @@ for epoch in range(epochs) :
         augmented_img = augmented_img.to(device)
         
         if ANGLE_MODE == True : 
-            center_pred,theta_cos_pred,theta_sin_pred,w_pred = model.forward_similarity(img,augmented_img,gknet_label)
+            if SIM == True :
+                center_pred,theta_cos_pred,theta_sin_pred,w_pred = model.forward_similarity(img,augmented_img,gknet_label)
+            else : 
+                center_pred,theta_cos_pred,theta_sin_pred,w_pred = model.forward_naive(img,augmented_img,gknet_label)
             
             centergt,theta_cosgt,theta_singt,wgt = augmented_gknet_label[:,:2], augmented_gknet_label[:,2],\
                                                     augmented_gknet_label[:,3], augmented_gknet_label[:,4]
         else : 
-            point_left_pred, point_right_pred  = model.forward_similarity(img,augmented_img,points_grasp.reshape(points_grasp.shape[0],4))
-            
+            if SIM == True : 
+                point_left_pred, point_right_pred  = model.forward_similarity(img,augmented_img,points_grasp.reshape(points_grasp.shape[0],4))
+            else :  
+                point_left_pred, point_right_pred  = model.forward_naive(img,augmented_img,points_grasp.reshape(points_grasp.shape[0],4))
             point_leftgt, point_rightgt = points_grasp_augmented[:,0].to(torch.float32) / 224., points_grasp_augmented[:,1].to(torch.float32)/ 224.
             #import pdb; pdb.set_trace()
             print("point_leftgt",point_leftgt)

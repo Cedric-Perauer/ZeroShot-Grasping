@@ -29,7 +29,7 @@ class GraspTransformer(nn.Module):
             #vit14s had 11 layers max
             self.dinov2d_backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
             ##freeze the dino layers
-            self.nc = 16
+            self.nc = 8
             self.tokenw = 16
             self.tokenh = 16 
             self.vision_layer_naive = VisionLayer(384*len(self.feature_layers),self.nc,self.tokenw,self.tokenh)
@@ -44,9 +44,9 @@ class GraspTransformer(nn.Module):
             self.input_dim_similarity = self.out_params  + 16 * 16 * self.nc
             
             self.mlp_head_naive = nn.Sequential(
-                    nn.Linear(self.input_dim_naive,128),
+                    nn.Linear(self.input_dim_naive,1024),
                     nn.ReLU(),
-                    nn.Linear(128, self.out_params)
+                    nn.Linear(1024, self.out_params)
                     )
             
             self.mlp_head_similarity = nn.Sequential(
@@ -101,9 +101,10 @@ class GraspTransformer(nn.Module):
             '''
             img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
             augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
-            img_feats = self.vision_layer(img_feats).reshape(img.shape[0],-1)
+            img_feats = self.vision_layer_naive(img_feats).reshape(img.shape[0],-1)
             augmented_feats = self.vision_layer_naive(augmented_feats).reshape(img.shape[0],-1)
-            #import pdb; pdb.set_trace()
+            
+            
             ml_input = torch.cat([img_feats,augmented_feats,grasp_label],dim=-1)
             mlp_forward = self.mlp_head_naive(ml_input)
             if self.angle_mode == True : 
@@ -115,7 +116,7 @@ class GraspTransformer(nn.Module):
                 return center,theta_cos,theta_sin,w
             else : 
                 point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
-                point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
+                #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
                 return point_left, point_right 
             
         def forward_similarity(self,img, img_augmented,grasp_label):     
@@ -125,8 +126,10 @@ class GraspTransformer(nn.Module):
             '''
             img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
             augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
+            
             similarity = torch.bmm(augmented_feats,torch.transpose(img_feats,1,2))
             reduced_similarity = self.vision_layer_similarity(similarity).reshape(img.shape[0],-1)
+            #import pdb; pdb.set_trace()
             ml_input = torch.cat([reduced_similarity,grasp_label],dim=-1)
             mlp_forward = self.mlp_head_similarity(ml_input)
             if self.angle_mode == True : 
