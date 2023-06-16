@@ -20,7 +20,7 @@ import random
 
 co3d_root = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/co3d/'
 label_dir = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/data/class_labels/'
-jacquard_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Jacquard/Samples/'
+jacquard_root  = os.path.expanduser("~") + '/ZeroShot-Grasping/zero-shot-pose/Jacquard_fence/Samples/'
 
 def augment_image(image,angle=10):
         ##rotate the image
@@ -36,7 +36,8 @@ class AugmentDataset(Dataset):
     
     def __init__(self,dataset_root=jacquard_root,
                  image_transform=None,
-                 num_targets=1,vis=False,crop=True,overfit=False):
+                 num_targets=1,vis=False,crop=True,overfit=False,img_size=224):
+        self.img_size = img_size
         self.dataset_root = dataset_root
         self.crop = crop
         self.overfit= overfit
@@ -50,13 +51,11 @@ class AugmentDataset(Dataset):
         #    self.classes.remove(self.img_vis_dir[:-1])
         self.image_dims = []
         self.items = []
-        self.transform_tensor = transforms.Compose([transforms.Resize((224,224)),
+        self.transform_tensor = transforms.Compose([transforms.Resize((self.img_size,self.img_size)),
                                                     transforms.ToTensor()])
         
         
         for num_c,cat in enumerate(self.classes) :
-            if num_c ==0 : 
-                continue
             if os.path.isdir(self.dataset_root + cat) == False:
                 continue
             cur_dict = {}
@@ -101,7 +100,7 @@ class AugmentDataset(Dataset):
                         h = h.split('\n')[0]
                         x,y,angle,w,h = float(x),float(y),float(angle),float(w),float(h)
                         if self.crop == False : 
-                            grasp.append([x * 224/1024.,y * 224/1024.,angle,w * 224/1024,h * 224/1024])
+                            grasp.append([x * self.img_size/1024.,y * self.img_size/1024.,angle,w * self.img_size/1024,h * self.img_size/1024])
                         else : 
                             grasp.append([x,y,angle,w,h])
                     
@@ -126,7 +125,7 @@ class AugmentDataset(Dataset):
                 for i in range(0,len(masks)):
                     mask_ref = self.transform_tensor(Image.open(masks[i]))
                     idcs = (mask_ref != 0).nonzero(as_tuple=False)[:,1:3]
-                    max_y,min_y,max_x,min_x = idcs[:,0].max()* 1024/224.,idcs[:,0].min()* 1024/224.,idcs[:,1].max()* 1024/224.,idcs[:,1].min()* 1024/224.
+                    max_y,min_y,max_x,min_x = idcs[:,0].max()* 1024/self.img_size,idcs[:,0].min()* 1024/self.img_size,idcs[:,1].max()* 1024/self.img_size,idcs[:,1].min()* 1024/self.img_size
                     if i >= 1:
                         crop_dims.append([min_x,min_y,max_x,max_y])
                         image_dict['dims'].append([min_x,max_x,min_y,max_y])
@@ -137,11 +136,11 @@ class AugmentDataset(Dataset):
                     outs = []
                     for idx in range(len(raw_grasp_labels[i])):
                         
-                        x1 = raw_grasp_labels[i][idx][0] = (raw_grasp_labels[i][idx][0] - (min_x) + self.border_size) * 224/(max_x-min_x + 2 * self.border_size)
-                        y1 = raw_grasp_labels[i][idx][1] = (raw_grasp_labels[i][idx][1] -  (min_y) + self.border_size) * 224/(max_y - min_y + self.border_size * 2)
+                        x1 = raw_grasp_labels[i][idx][0] = (raw_grasp_labels[i][idx][0] - (min_x) + self.border_size) * self.img_size/(max_x-min_x + 2 * self.border_size)
+                        y1 = raw_grasp_labels[i][idx][1] = (raw_grasp_labels[i][idx][1] -  (min_y) + self.border_size) * self.img_size/(max_y - min_y + self.border_size * 2)
                         
-                        w1 = raw_grasp_labels[i][idx][3] = (raw_grasp_labels[i][idx][3]) * 224/(max_x-min_x + 2 * self.border_size)
-                        h1 = raw_grasp_labels[i][idx][4] = (raw_grasp_labels[i][idx][4]) * 224/(max_y-min_y + 2 * self.border_size)
+                        w1 = raw_grasp_labels[i][idx][3] = (raw_grasp_labels[i][idx][3]) * self.img_size/(max_x-min_x + 2 * self.border_size)
+                        h1 = raw_grasp_labels[i][idx][4] = (raw_grasp_labels[i][idx][4]) * self.img_size/(max_y-min_y + 2 * self.border_size)
                         #import pdb; pdb.set_trace()
                         cur = [x1.item(),y1.item(),raw_grasp_labels[i][idx][2],w1.item(),h1.item()]
                         outs.append(cur)
@@ -159,10 +158,10 @@ class AugmentDataset(Dataset):
                         ##rescale midpoint for plot on original image
                         if self.crop:
                             for ix in range(len(grasp_labels_vis[idx])):
-                                grasp_labels_vis[idx][ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
-                                grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
-                                grasp_labels_vis[idx][ix][3] = grasp_labels_vis[idx][ix][3] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
-                                grasp_labels_vis[idx][ix][4] = grasp_labels_vis[idx][ix][4] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
+                                grasp_labels_vis[idx][ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /self.img_size
+                                grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /self.img_size
+                                grasp_labels_vis[idx][ix][3] = grasp_labels_vis[idx][ix][3] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /self.img_size
+                                grasp_labels_vis[idx][ix][4] = grasp_labels_vis[idx][ix][4] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /self.img_size
                         
                         grasp_vis, _, gripper_vis = self.create_grasp_rectangle(grasp_labels_vis[idx])
                         if self.crop : 
@@ -287,10 +286,10 @@ class AugmentDataset(Dataset):
         for n,el in enumerate(grasp) : 
             br,tr,tl,bl = el
             point_left, point_right = gripper_points[n]
-            #br[0],br[1] = int(br[0] * w/224.),int(br[1] * h /224.)
-            #bl[0],bl[1] = int(bl[0] * w/224.),int(bl[1] * h /224.)
-            #tl[0],tl[1] = int(tl[0] * w/224.),int(tl[1] * h /224.)
-            #tr[0],tr[1] = int(tr[0] * w/224.),int(tr[1] * h /224.)
+            #br[0],br[1] = int(br[0] * w/self.img_size.),int(br[1] * h /self.img_size.)
+            #bl[0],bl[1] = int(bl[0] * w/self.img_size.),int(bl[1] * h /self.img_size.)
+            #tl[0],tl[1] = int(tl[0] * w/self.img_size.),int(tl[1] * h /self.img_size.)
+            #tr[0],tr[1] = int(tr[0] * w/self.img_size.),int(tr[1] * h /self.img_size.)
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))  
@@ -312,19 +311,19 @@ class AugmentDataset(Dataset):
         img = cv2.imread(img)
         
         #import pdb; pdb.set_trace()
-        #grasp[ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
-        #grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
-        #grasp_labels_vis[idx][ix][3] = grasp_labels_vis[idx][ix][3] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /224.
-        #grasp_labels_vis[idx][ix][4] = grasp_labels_vis[idx][ix][4] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /224.
+        #grasp[ix][0] = grasp_labels_vis[idx][ix][0] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /self.img_size.
+        #grasp_labels_vis[idx][ix][1] = grasp_labels_vis[idx][ix][1] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /self.img_size.
+        #grasp_labels_vis[idx][ix][3] = grasp_labels_vis[idx][ix][3] * (image_dict['dims'][idx][1] - image_dict['dims'][idx][0] + 2 * self.border_size) /self.img_size.
+        #grasp_labels_vis[idx][ix][4] = grasp_labels_vis[idx][ix][4] * (image_dict['dims'][idx][3] - image_dict['dims'][idx][2] + 2 * self.border_size) /self.img_size.
         grasps = grasp[0]
         all_grasps = []
         for g in grasps : 
             
             if self.crop : 
-                g[0] = g[0] * (dims[1] - dims[0] + 2 * self.border_size) /224.
-                g[1] = g[1] * (dims[3] - dims[2] + 2 * self.border_size) /224.
-                g[3] = g[3] * (dims[1] - dims[0] + 2 * self.border_size) /224.
-                g[4] = g[4] * (dims[3] - dims[2] + 2 * self.border_size) /224.
+                g[0] = g[0] * (dims[1] - dims[0] + 2 * self.border_size) /self.img_size
+                g[1] = g[1] * (dims[3] - dims[2] + 2 * self.border_size) /self.img_size
+                g[3] = g[3] * (dims[1] - dims[0] + 2 * self.border_size) /self.img_size
+                g[4] = g[4] * (dims[3] - dims[2] + 2 * self.border_size) /self.img_size
             
                 
                 
@@ -335,10 +334,10 @@ class AugmentDataset(Dataset):
         ref_grasps = []
         for g in grasp_ref:
             if self.crop : 
-                g[0] = g[0] * (dims_ref[1] - dims_ref[0] + 2 * self.border_size) /224.
-                g[1] = g[1] * (dims_ref[3] - dims_ref[2] + 2 * self.border_size) /224.
-                g[3] = g[3] * (dims_ref[1] - dims_ref[0] + 2 * self.border_size) /224.
-                g[4] = g[4] * (dims_ref[3] - dims_ref[2] + 2 * self.border_size) /224.
+                g[0] = g[0] * (dims_ref[1] - dims_ref[0] + 2 * self.border_size) /self.img_size
+                g[1] = g[1] * (dims_ref[3] - dims_ref[2] + 2 * self.border_size) /self.img_size
+                g[3] = g[3] * (dims_ref[1] - dims_ref[0] + 2 * self.border_size) /self.img_size
+                g[4] = g[4] * (dims_ref[3] - dims_ref[2] + 2 * self.border_size) /self.img_size
             
             ref_grasps.append(g)
         grasp_vis_ref, _, grasp_pts_ref = self.create_grasp_rectangle(ref_grasps)
@@ -359,12 +358,12 @@ class AugmentDataset(Dataset):
             point_left, point_right = grasp_pts[n]
             #import pdb; pdb.set_trace()
             if not self.crop :
-                point_left = [int(i * 1024/224) for i in point_left]
-                point_right = [int(i * 1024/224) for i in point_right]
-            #br = [int(i * 1024/224.) for i in br]
-            #tr = [int(i * 1024/224.) for i in tr]
-            #bl = [int(i * 1024/224.) for i in bl]
-            #tl = [int(i * 1024/224.) for i in tl]
+                point_left = [int(i * 1024/self.img_size) for i in point_left]
+                point_right = [int(i * 1024/self.img_size) for i in point_right]
+            #br = [int(i * 1024/self.img_size.) for i in br]
+            #tr = [int(i * 1024/self.img_size.) for i in tr]
+            #bl = [int(i * 1024/self.img_size.) for i in bl]
+            #tl = [int(i * 1024/self.img_size.) for i in tl]
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))
@@ -405,15 +404,15 @@ class AugmentDataset(Dataset):
             ptl, ptr = el[0], el[1]
             #dims = [i.item() for i in dims]
             if self.crop : 
-                ptl[0] = ptl[0] * (dims[3] - dims[2] + 2 * self.border_size) /224.
-                ptr[0] = ptr[0] * (dims[3] - dims[2] + 2 * self.border_size) /224.
-                ptl[1] = ptl[1] * (dims[1] - dims[0] + 2 * self.border_size) /224.
-                ptr[1] = ptr[1] * (dims[1] - dims[0] + 2 * self.border_size) /224.
+                ptl[0] = ptl[0] * (dims[3] - dims[2] + 2 * self.border_size) /self.img_size
+                ptr[0] = ptr[0] * (dims[3] - dims[2] + 2 * self.border_size) /self.img_size
+                ptl[1] = ptl[1] * (dims[1] - dims[0] + 2 * self.border_size) /self.img_size
+                ptr[1] = ptr[1] * (dims[1] - dims[0] + 2 * self.border_size) /self.img_size
             else : 
-                ptl[0] = ptl[0] * 1024/224.
-                ptr[0] = ptr[0] * 1024/224.
-                ptr[1] = ptr[1] * 1024/224.
-                ptl[1] = ptl[1] * 1024/224.
+                ptl[0] = ptl[0] * 1024/self.img_size
+                ptr[0] = ptr[0] * 1024/self.img_size
+                ptr[1] = ptr[1] * 1024/self.img_size
+                ptl[1] = ptl[1] * 1024/self.img_size
             
                 
             ptl = [ptl[1],ptl[0]]
@@ -429,11 +428,11 @@ class AugmentDataset(Dataset):
         if self.crop :
             for pred in dst[0]:
                 x,y = pred
-                img2 = cv2.circle(img2,(int(y * (dims[1] - dims[0] + 2 * self.border_size) /224.),int(x * (dims[3] - dims[2] + 2 * self.border_size) /224.)), 2, (0,0,255), -1)
+                img2 = cv2.circle(img2,(int(y * (dims[1] - dims[0] + 2 * self.border_size) /self.img_size),int(x * (dims[3] - dims[2] + 2 * self.border_size) /self.img_size)), 2, (0,0,255), -1)
             
             for center in centers_new[:,0,:]:
                 x,y = center
-                img2 = cv2.circle(img2,(int(y * (dims[1] - dims[0] + 2 * self.border_size) /224.),int(x * (dims[3] - dims[2] + 2 * self.border_size) /224.)), 2, (255,255,0), -1)
+                img2 = cv2.circle(img2,(int(y * (dims[1] - dims[0] + 2 * self.border_size) /self.img_size),int(x * (dims[3] - dims[2] + 2 * self.border_size) /self.img_size)), 2, (255,255,0), -1)
             
         
         cv2.imwrite(store_dir + str(self.img_cnt) + '_transformed.png',img2)
@@ -444,12 +443,12 @@ class AugmentDataset(Dataset):
             point_left, point_right = grasp_pts_ref[n]
             #import pdb; pdb.set_trace()
             if not self.crop :
-                point_left = [int(i * 1024/224) for i in point_left]
-                point_right = [int(i * 1024/224) for i in point_right]
-            #br = [int(i * 1024/224.) for i in br]
-            #tr = [int(i * 1024/224.) for i in tr]
-            #bl = [int(i * 1024/224.) for i in bl]
-            #tl = [int(i * 1024/224.) for i in tl]
+                point_left = [int(i * 1024/self.img_size) for i in point_left]
+                point_right = [int(i * 1024/self.img_size) for i in point_right]
+            #br = [int(i * 1024/self.img_size.) for i in br]
+            #tr = [int(i * 1024/self.img_size.) for i in tr]
+            #bl = [int(i * 1024/self.img_size.) for i in bl]
+            #tl = [int(i * 1024/self.img_size.) for i in tl]
             
             #print(len(square_vertices))    
             color1 = (list(np.random.choice(range(256), size=3)))
@@ -506,22 +505,32 @@ class AugmentDataset(Dataset):
         augmented_img = augment_image(img,angle)
         augmented_gknet_label = gknet_label.copy()  
         augmented_angle = augmented_gknet_label[2] - angle #just change the angle of the label here
-        xr,yr = self.rotated_about(augmented_gknet_label[0],augmented_gknet_label[1],224/2.,224/2.,math.radians(-angle))
+        augmented_angle2 = augmented_angle
+        if augmented_angle < 0 :
+            augmented_angle2 = augmented_angle + 180
+        else : 
+            augmented_angle2 = augmented_angle - 180
+            
+        xr,yr = self.rotated_about(augmented_gknet_label[0],augmented_gknet_label[1],self.img_size/2.,self.img_size/2.,math.radians(-angle))
         
         #normalize and create angle labels 
-        x = xr / 224.
-        y = yr / 224.
+        x = xr / self.img_size
+        y = yr / self.img_size
         angle_cos = math.cos(math.radians(augmented_angle))
         angle_sin = math.sin(math.radians(augmented_angle))
+        
+        angle_cos2 = math.cos(math.radians(augmented_angle2))
+        angle_sin2 = math.sin(math.radians(augmented_angle2))
         wr = augmented_gknet_label[3]
-        w = augmented_gknet_label[3] / 224.
+        w = augmented_gknet_label[3] / self.img_size
         augmented_gknet_label = torch.tensor([x,y,angle_cos,angle_sin,w])
+        augmented_gknet_label2 = torch.tensor([x,y,angle_cos2,angle_sin2,w])
 
         xt,yt,angle_label,wt = gknet_label
-        gknet_label = [xt/224.,yt/224.,math.cos(math.radians(angle_label)),math.sin(math.radians(angle_label)),wt/224.]
+        gknet_label = [xt/self.img_size,yt/self.img_size,math.cos(math.radians(angle_label)),math.sin(math.radians(angle_label)),wt/self.img_size]
         '''
         if self.crop == False :
-            grasps_ref = grasps_ref * 224/1024
+            grasps_ref = grasps_ref * self.img_size/1024
         '''
         lxt,lyt = xr - wr/2., yr
         rxt,ryt = xr + wr/2., yr
@@ -532,8 +541,11 @@ class AugmentDataset(Dataset):
         data_dict['img'] = img
         data_dict['points_grasp'] = torch.tensor(points_grasps)
         
+        
         data_dict['points_grasp_augmented'] = torch.tensor([[lxt,lyt],[rxt,ryt]])
+        data_dict['points_grasp_augmented2'] = torch.tensor([[rxt,ryt],[lxt,lyt]]) #this one is symmetrically switched
         data_dict['img_augmented'] = augmented_img  
         data_dict['img_augmented_grasp'] = torch.tensor(augmented_gknet_label) 
+        data_dict['img_augmented_grasp2'] = torch.tensor(augmented_gknet_label2) 
         
         return data_dict

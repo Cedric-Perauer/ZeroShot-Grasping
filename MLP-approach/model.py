@@ -1,5 +1,8 @@
 import torch 
 import torch.nn as nn 
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import torchvision.models as models 
 
 
 class VisionLayer(nn.Module):
@@ -18,42 +21,62 @@ class VisionLayer(nn.Module):
 
 class GraspTransformer(nn.Module):
     
-        def __init__(self,feature_layers=[11],angle_mode=False):
+        def __init__(self,feature_layers=[11],angle_mode=False,img_size=224,SIM=False):
             super(GraspTransformer,self).__init__()
             '''
             angle_mode = True : uses the angle representation (x,y,theta_cos,theta_sin,w)
             angle_mode = False : uses the grasp point representation (xl,yl,xr,yr)
             '''
+            self.img_size = img_size
             self.angle_mode = angle_mode
             self.feature_layers = feature_layers
             #vit14s had 11 layers max
             self.dinov2d_backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
             ##freeze the dino layers
-            self.nc = 8
-            self.tokenw = 16
-            self.tokenh = 16 
-            self.vision_layer_naive = VisionLayer(384*len(self.feature_layers),self.nc,self.tokenw,self.tokenh)
-            self.vision_layer_similarity = VisionLayer(256,self.nc,self.tokenw,self.tokenh)
+            self.nc = 16
+            self.pca = PCA(n_components=3)
+            self.tokenw = int(self.img_size/14.)
+            self.tokenh = int(self.img_size/14.)
+            self.img_multiplier = int(self.img_size/224.)
+            self.vision_layer_naive = VisionLayer(int(384 *len(self.feature_layers)),self.nc,self.tokenw,self.tokenh)
+            self.vision_layer_similarity = VisionLayer(self.tokenh*self.tokenw,self.nc,self.tokenw,self.tokenh)
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
             ##freeze dino layers
             for param in self.dinov2d_backbone.parameters(): 
                 param.requires_grad = False
             
             self.out_params = 5 if self.angle_mode else 4
+            self.resnet = models.resnet18(pretrained=True)
+            self.resnet.fc = nn.Identity()
             
-            self.input_dim_naive = self.out_params + 2 * self.tokenw * self.tokenh * self.nc
-            self.input_dim_similarity = self.out_params  + 16 * 16 * self.nc
             
-            self.mlp_head_naive = nn.Sequential(
-                    nn.Linear(self.input_dim_naive,1024),
-                    nn.ReLU(),
-                    nn.Linear(1024, self.out_params)
+            
+            
+            if SIM == False : 
+                self.input_dim_naive = self.out_params + self.tokenw * self.tokenh * self.nc * 2
+            else : 
+                self.input_dim_similarity = self.out_params  + self.tokenh * self.tokenh * self.nc 
+            
+            self.mlp_head_resnet = nn.Sequential(
+                        nn.Linear(512*2+self.out_params,128),
+                        nn.ReLU(),
+                        nn.Linear(128, self.out_params)
                     )
             
-            self.mlp_head_similarity = nn.Sequential(
-                        nn.Linear(self.input_dim_similarity,1024),
+            
+            if SIM == False : 
+                self.mlp_head_naive = nn.Sequential(
+                        nn.Linear(self.input_dim_naive,1024),
                         nn.ReLU(),
                         nn.Linear(1024, self.out_params)
-                        )
+                    )
+            else :     
+                self.mlp_head_similarity = nn.Sequential(
+                            nn.Linear(self.input_dim_similarity,1024),
+                            nn.ReLU(),
+                            nn.Linear(1024, self.out_params)
+                            )
+            
             
         def process_query_label(self,label_query):
             pass #tbd grasp transformation of the query label into GK Net representation 
@@ -92,17 +115,19 @@ class GraspTransformer(nn.Module):
             ml_input = torch.cat([feats_ref,feats_query,query_label],dim=-1)
             mlp_forward = self.mlp_head(ml_input)
             x,y,theta,w = mlp_forward[:,0], mlp_forward[:,1], mlp_forward[:,2], mlp_forward[:,3]
-            return x,y,theta,w 
+            return x,y,theta,w
             
         def forward_naive(self,img, img_augmented,grasp_label):     
             '''
             forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
             this feature vector is then feed through an MLP to get the grasp position in the augmented image 
             '''
-            img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
-            augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
-            img_feats = self.vision_layer_naive(img_feats).reshape(img.shape[0],-1)
-            augmented_feats = self.vision_layer_naive(augmented_feats).reshape(img.shape[0],-1)
+            img_feats_raw = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+            augmented_feats_raw = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
+            
+            
+            img_feats = self.vision_layer_naive(img_feats_raw).reshape(img.shape[0],-1)
+            augmented_feats = self.vision_layer_naive(augmented_feats_raw).reshape(img.shape[0],-1)
             
             
             ml_input = torch.cat([img_feats,augmented_feats,grasp_label],dim=-1)
@@ -113,21 +138,64 @@ class GraspTransformer(nn.Module):
                 #theta_cos = nn.Tanh()(theta_cos)
                 #theta_sin = nn.Tanh()(theta_sin)
                 w = nn.Sigmoid()(w)
-                return center,theta_cos,theta_sin,w
+                return center,theta_cos,theta_sin,w, img_feats_raw, augmented_feats_raw
             else : 
                 point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
                 #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
-                return point_left, point_right 
+                return point_left, point_right, img_feats_raw, augmented_feats_raw 
+        
+        def forward_new(self,img, img_augmented,grasp_label):     
+            '''
+            forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
+            this feature vector is then feed through an MLP to get the grasp position in the augmented image 
+            '''
+            img_feats_raw = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+            augmented_feats_raw = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
+            
+            self.pca.fit(img_feats_raw[0].cpu())
+            self.pca.fit(augmented_feats_raw[0].cpu())
+            pca_features_augmented = self.pca.transform(augmented_feats_raw[0].cpu())
+            pca_features_augmented[:, 0] = (pca_features_augmented[:, 0] - pca_features_augmented[:, 0].min()) / \
+                    (pca_features_augmented[:, 0].max() - pca_features_augmented[:, 0].min())
+                    
+            pca_features = self.pca.transform(img_feats_raw[0].cpu())
+            pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
+                    (pca_features[:, 0].max() - pca_features[:, 0].min())
+                
+            im_dim = int(pca_features.shape[0] ** 0.5)
+            pca_features = pca_features.reshape(1,3,im_dim,im_dim) 
+            pca_features_augmented = pca_features_augmented.reshape(1,3,im_dim,im_dim)
+            
+            pca_features = torch.from_numpy(pca_features).to(self.device).to(torch.float32)
+            pca_features_augmented = torch.from_numpy(pca_features_augmented).to(self.device).to(torch.float32)
+            pca_features = self.resnet(pca_features)
+            pca_features_augmented = self.resnet(pca_features_augmented)
+            
+            ml_input = torch.cat([pca_features,pca_features_augmented,grasp_label],dim=-1)
+            mlp_forward = self.mlp_head_resnet(ml_input)
+            if self.angle_mode == True : 
+                center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+                center = nn.Sigmoid()(center)
+                #theta_cos = nn.Tanh()(theta_cos)
+                #theta_sin = nn.Tanh()(theta_sin)
+                w = nn.Sigmoid()(w)
+                return center,theta_cos,theta_sin,w, img_feats_raw, augmented_feats_raw
+            else : 
+                point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
+                #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
+                return point_left, point_right, img_feats_raw, augmented_feats_raw 
+            
             
         def forward_similarity(self,img, img_augmented,grasp_label):     
             '''
             forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
             this feature vector is then feed through an MLP to get the grasp position in the augmented image 
             '''
-            img_feats = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
-            augmented_feats = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
+            img_feats_raw = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+            #import pdb; pdb.set_trace()
+            augmented_feats_raw = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
             
-            similarity = torch.bmm(augmented_feats,torch.transpose(img_feats,1,2))
+            similarity = torch.bmm(augmented_feats_raw,torch.transpose(img_feats_raw,1,2))
             reduced_similarity = self.vision_layer_similarity(similarity).reshape(img.shape[0],-1)
             #import pdb; pdb.set_trace()
             ml_input = torch.cat([reduced_similarity,grasp_label],dim=-1)
@@ -138,11 +206,11 @@ class GraspTransformer(nn.Module):
                 #theta_cos = nn.Tanh()(theta_cos)
                 #theta_sin = nn.Tanh()(theta_sin)
                 w = nn.Sigmoid()(w)
-                return center,theta_cos,theta_sin,w
+                return center,theta_cos,theta_sin,w, img_feats_raw, augmented_feats_raw
             else : 
                 point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
                 #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
-                return point_left, point_right 
+                return point_left, point_right , img_feats_raw, augmented_feats_raw
             
             
             
