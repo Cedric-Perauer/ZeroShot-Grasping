@@ -28,6 +28,7 @@ Repository for ZeroShot-Grasping project
 Gaussian-based Grasping Representation](https://arxiv.org/pdf/2101.10226.pdf)
 3. [SurfEmb](https://arxiv.org/pdf/2111.13489.pdf) | [Github](https://github.com/rasmushaugaard/surfemb)
 4. [TransGrasp](https://arxiv.org/pdf/2207.07861.pdf) | [Github](https://github.com/yanjh97/TransGrasp)
+5. [A Tale of Two Features : SD-Dino](https://arxiv.org/pdf/2305.15347.pdf) | [Github](https://github.com/facebookresearch/dinov2)
 
 
 ## Dataset Links
