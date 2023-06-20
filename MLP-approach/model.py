@@ -41,6 +41,7 @@ class GraspTransformer(nn.Module):
             self.vision_layer_naive = VisionLayer(int(384 *len(self.feature_layers)),self.nc,self.tokenw,self.tokenh)
             self.vision_layer_similarity = VisionLayer(self.tokenh*self.tokenw,self.nc,self.tokenw,self.tokenh)
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.pca_mode = False
             ##freeze dino layers
             for param in self.dinov2d_backbone.parameters(): 
                 param.requires_grad = False
@@ -50,7 +51,7 @@ class GraspTransformer(nn.Module):
             self.resnet.fc = nn.Identity()
             
             
-            
+            self.conv1 = VisionLayer(384,3,self.tokenw,self.tokenh)
             
             if SIM == False : 
                 self.input_dim_naive = self.out_params + self.tokenw * self.tokenh * self.nc * 2
@@ -152,24 +153,33 @@ class GraspTransformer(nn.Module):
             img_feats_raw = self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
             augmented_feats_raw = self.dinov2d_backbone.forward_features(img_augmented)['x_norm_patchtokens']
             
-            self.pca.fit(img_feats_raw[0].cpu())
-            self.pca.fit(augmented_feats_raw[0].cpu())
-            pca_features_augmented = self.pca.transform(augmented_feats_raw[0].cpu())
-            pca_features_augmented[:, 0] = (pca_features_augmented[:, 0] - pca_features_augmented[:, 0].min()) / \
-                    (pca_features_augmented[:, 0].max() - pca_features_augmented[:, 0].min())
+            if self.pca_mode == True :
+                self.pca.fit(img_feats_raw[0].cpu())
+                self.pca.fit(augmented_feats_raw[0].cpu())
+                pca_features_augmented = self.pca.transform(augmented_feats_raw[0].cpu())
+                pca_features_augmented[:, 0] = (pca_features_augmented[:, 0] - pca_features_augmented[:, 0].min()) / \
+                        (pca_features_augmented[:, 0].max() - pca_features_augmented[:, 0].min())
+                        
+                pca_features = self.pca.transform(img_feats_raw[0].cpu())
+                pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
+                        (pca_features[:, 0].max() - pca_features[:, 0].min())
                     
-            pca_features = self.pca.transform(img_feats_raw[0].cpu())
-            pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
-                    (pca_features[:, 0].max() - pca_features[:, 0].min())
+                im_dim = int(pca_features.shape[0] ** 0.5)
+                pca_features = pca_features.reshape(1,3,im_dim,im_dim) 
+                pca_features_augmented = pca_features_augmented.reshape(1,3,im_dim,im_dim)
                 
-            im_dim = int(pca_features.shape[0] ** 0.5)
-            pca_features = pca_features.reshape(1,3,im_dim,im_dim) 
-            pca_features_augmented = pca_features_augmented.reshape(1,3,im_dim,im_dim)
+                pca_features = torch.from_numpy(pca_features).to(self.device).to(torch.float32)
+                pca_features_augmented = torch.from_numpy(pca_features_augmented).to(self.device).to(torch.float32)
+                pca_features = self.resnet(pca_features)
+                pca_features_augmented = self.resnet(pca_features_augmented)
             
-            pca_features = torch.from_numpy(pca_features).to(self.device).to(torch.float32)
-            pca_features_augmented = torch.from_numpy(pca_features_augmented).to(self.device).to(torch.float32)
-            pca_features = self.resnet(pca_features)
-            pca_features_augmented = self.resnet(pca_features_augmented)
+            else : 
+                im_dim = int(img_feats_raw.shape[1] ** 0.5)
+                img_feats_raw_re = img_feats_raw.reshape(img_feats_raw.shape[0],384,im_dim,im_dim)
+                augmented_feats_raw_re = augmented_feats_raw.reshape(img_feats_raw.shape[0],384,im_dim,im_dim)
+                pca_features = self.resnet(self.conv1(img_feats_raw_re))
+                pca_features_augmented = self.resnet(self.conv1(augmented_feats_raw_re)) 
+                #import pdb; pdb.set_trace()
             
             ml_input = torch.cat([pca_features,pca_features_augmented,grasp_label],dim=-1)
             mlp_forward = self.mlp_head_resnet(ml_input)
@@ -212,7 +222,7 @@ class GraspTransformer(nn.Module):
                 #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
                 return point_left, point_right , img_feats_raw, augmented_feats_raw
             
- 
+            
             
             
             

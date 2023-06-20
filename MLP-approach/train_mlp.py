@@ -406,13 +406,16 @@ for epoch in range(epochs) :
                     
             
             
-            fig, axs = plt.subplot_mosaic([['A', 'B',"C","D"]],
+            fig, axs = plt.subplot_mosaic([['A', 'B',"C",],
+                                            ["D","E","F"]],
                                                 figsize=(10,5))
             axs['A'].set_title('Augmented image Preds')
             axs['B'].set_title('Augmented image GT')
             axs['C'].set_title('Image features')
             axs['C'].set_title('Normal Image features')
             axs['D'].set_title('Augmented Image features')
+            axs['E'].set_title('Image features foreground')
+            axs['F'].set_title('Augmented features foreground')
             axs['A'].imshow(denorm_torch_to_pil(augmented_img[i].cpu()))
             axs['A'].scatter([lxt],[lyt],color='red',s=3)
             axs['A'].scatter([rxt],[ryt],color='green',s=3)
@@ -429,21 +432,98 @@ for epoch in range(epochs) :
             if ANGLE_MODE == True :
                 axs['B'].scatter([x.cpu().detach()],[y.cpu().detach()],color='cyan',s=3)
                 
+            #attentions = model.dinov2d_backbone.get_last_selfattention(img) 
+            import pdb; pdb.set_trace()
+            
             img_feats = img_feats[i].cpu()
+            augmented_img_feats = augemented_feats[i].cpu()
+            total_features = torch.stack([img_feats, augmented_img_feats]).reshape(-1,384).numpy()
+            pca = PCA(n_components=3,random_state=42)
+            pca.fit(total_features)
+            pca_features = pca.transform(total_features)
+            pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
+                     (pca_features[:, 0].max() - pca_features[:, 0].min())
+
+            pca_features_img = pca_features.reshape(2, patch_h, patch_w, 3)
+            
+            img1 = pca_features[i * patch_h * patch_w: (i+1) * patch_h * patch_w,0].reshape(patch_h, patch_w)
+            img2 = pca_features[1 * patch_h * patch_w: (1+1) * patch_h * patch_w,0].reshape(patch_h, patch_w)
+            axs['C'].imshow(img1) 
+            axs['D'].imshow(img2) 
+            pca_features_bg = pca_features[:, 0] <= 0.35 # from first histogram
+            pca_features_fg = ~pca_features_bg
+            bg_num = sum(pca_features_bg)
+            fg_num = sum(pca_features_fg)
+            #if bg_num > fg_num:
+            #    pca_features_bg, pca_features_fg = pca_features_fg, pca_features_bg 
+            #import pdb; pdb.set_trace()
+            pca.fit(total_features[pca_features_fg]) 
+            pca_features_left = pca.transform(total_features[pca_features_fg])
+
+            for i in range(3):
+                # min_max scaling
+                pca_features_left[:, i] = (pca_features_left[:, i] - pca_features_left[:, i].min()) / (pca_features_left[:, i].max() - pca_features_left[:, i].min())
+
+            pca_features_rgb = pca_features.copy()
+            # for black background
+            pca_features_rgb[pca_features_bg] = 0
+            # new scaled foreground features
+            pca_features_rgb[pca_features_fg] = pca_features_left
+            pca_features_rgb = pca_features_rgb.reshape(2, patch_h, patch_w, 3)
+            
+            axs['E'].imshow(pca_features_rgb[0]) 
+            axs['F'].imshow(pca_features_rgb[1]) 
+            '''
             pca = PCA(n_components=3)
             pca.fit(img_feats)
             pca_features = pca.transform(img_feats)
             pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
                     (pca_features[:, 0].max() - pca_features[:, 0].min())
-            axs['C'].imshow(pca_features[i*patch_h*patch_w : (i+1)*patch_h*patch_w, 0].reshape(patch_h, patch_w))    
-                
-            augmented_img_feats = augemented_feats[i].cpu()
+            pca_features_bg = pca_features[:, 0] > 0.35 # from first histogram
+            pca_features_fg = ~pca_features_bg
+            
+            pca.fit(img_feats[pca_features_fg]) 
+            pca_features_left = pca.transform(img_feats[pca_features_fg])
+            for id in range(3):
+                # min_max scaling
+                pca_features_left[:, id] = (pca_features_left[:, id] - pca_features_left[:, id].min()) / (pca_features_left[:, id].max() - pca_features_left[:, id].min())
+
+            pca_features_rgb = pca_features.copy()
+            # for black background
+            pca_features_rgb[pca_features_bg] = 0
+            # new scaled foreground features
+            pca_features_rgb[pca_features_fg] = pca_features_left
+            pca_features_rgb = pca_features_rgb.reshape(patch_h, patch_w, 3)
+            '''
+            
+            #axs['C'].imshow(pca_features[i*patch_h*patch_w : (i+1)*patch_h*patch_w, 0].reshape(patch_h, patch_w))    
+            #axs['E'].imshow(pca_features_rgb)
+            #augmented_img_feats = augemented_feats[i].cpu()
+            '''
             pca = PCA(n_components=3)
             pca.fit(augmented_img_feats)
             pca_features = pca.transform(augmented_img_feats)
             pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
                     (pca_features[:, 0].max() - pca_features[:, 0].min())
-            axs['D'].imshow(pca_features[i*patch_h*patch_w : (i+1)*patch_h*patch_w, 0].reshape(patch_h, patch_w))   
+            
+            pca_features_bg = pca_features[:, 0] > 0.35 # from first histogram
+            pca_features_fg = ~pca_features_bg
+            
+            pca.fit(img_feats[pca_features_fg]) 
+            pca_features_left = pca.transform(img_feats[pca_features_fg])
+            for id in range(3):
+                # min_max scaling
+                pca_features_left[:, id] = (pca_features_left[:, id] - pca_features_left[:, id].min()) / (pca_features_left[:, id].max() - pca_features_left[:, id].min())
+
+            pca_features_rgb = pca_features.copy()
+            # for black background
+            pca_features_rgb[pca_features_bg] = 0
+            # new scaled foreground features
+            pca_features_rgb[pca_features_fg] = pca_features_left
+            pca_features_rgb = pca_features_rgb.reshape(patch_h, patch_w, 3)
+            '''
+            #axs['F'].imshow(pca_features_rgb)
+            #axs['D'].imshow(pca_features[i*patch_h*patch_w : (i+1)*patch_h*patch_w, 0].reshape(patch_h, patch_w))   
             
             plt.tight_layout()
             plt.savefig(save_name + '.png', dpi=150)
