@@ -78,6 +78,9 @@ device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('
 image_norm_mean = (0.485, 0.456, 0.406)
 image_norm_std = (0.229, 0.224, 0.225)
 image_size = 840
+    
+    
+    
 
 def get_transform():
         image_transform = transforms.Compose([
@@ -183,7 +186,7 @@ model = model.to(device)
 print("load data")
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
 dataset = AugmentDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,
-                         crop=CROP,overfit=True,img_size=image_size)
+                         crop=CROP,overfit=False,img_size=image_size)
 dataset.img_cnt = 0 
 
 vis_dir = 'vis_out/'  #to look at the labels
@@ -212,9 +215,11 @@ for epoch in range(epochs) :
         augmented_img = data['img_augmented']
         gknet_label = data['img_grasp']
         augmented_gknet_label = data['img_augmented_grasp']
+        augmented_gknet_label2 = data['img_augmented_grasp2']
         batch_size = img.shape[0]
         points_grasp = data['points_grasp']
         points_grasp_augmented = data['points_grasp_augmented']
+        points_grasp_augmented2 = data['points_grasp_augmented2']
         ##for the visualisation of the grasp 
         VIS = False
         if VIS : 
@@ -265,10 +270,12 @@ for epoch in range(epochs) :
         
         gknet_label = gknet_label.to(device)
         augmented_gknet_label = augmented_gknet_label.to(device)
+        augmented_gknet_label2 = augmented_gknet_label2.to(device)
         img = img.to(device)
         augmented_img = augmented_img.to(device)
         points_grasp = points_grasp.to(device)
         points_grasp_augmented = points_grasp_augmented.to(device)
+        points_grasp_augmented2 = points_grasp_augmented2.to(device)
         
         if ANGLE_MODE == True : 
             
@@ -281,6 +288,10 @@ for epoch in range(epochs) :
             
             centergt,theta_cosgt,theta_singt,wgt = augmented_gknet_label[:,:2], augmented_gknet_label[:,2],\
                                                     augmented_gknet_label[:,3], augmented_gknet_label[:,4]
+
+            theta_singt2, theta_cosgt2 = augmented_gknet_label2[:,2], augmented_gknet_label2[:,3]
+            
+            
         else : 
             if MODE == 'similarity' :
                 point_left_pred, point_right_pred, img_feats, augemented_feats  = model.forward_similarity(img,augmented_img,points_grasp.reshape(points_grasp.shape[0],4))
@@ -289,21 +300,25 @@ for epoch in range(epochs) :
             elif MODE == 'resnet': 
                 point_left_pred, point_right_pred, img_feats, augemented_feats = model.forward_new(img,augmented_img,gknet_label)
             point_leftgt, point_rightgt = points_grasp_augmented[:,0].to(torch.float32) /  image_size, points_grasp_augmented[:,1].to(torch.float32)/  image_size
-            
-            #import pdb; pdb.set_trace()
-            #print("point_leftgt",point_leftgt)
-            #print('point_left_pred',point_left_pred)
-            #print('point_rightgt',point_rightgt)
-            #print('point_right_pred',point_right_pred)
+            point_leftgt2, point_rightgt2 = points_grasp_augmented2[:,0].to(torch.float32) /  image_size, points_grasp_augmented2[:,1].to(torch.float32)/  image_size
             
         optim.zero_grad()
 
         if ANGLE_MODE == True : 
             center_loss = loss(center_pred,centergt)
+            
             cos_loss = loss(theta_cos_pred,theta_cosgt)
+            cos_loss2 = loss(theta_cos_pred,theta_cosgt2)
             sin_loss = loss(theta_sin_pred,theta_singt)
+            sin_loss2 = loss(theta_sin_pred,theta_singt2)
+            
+            angle_loss1 = cos_loss + sin_loss
+            angle_loss2 = cos_loss2 + sin_loss2
+            
+            angle_loss = min(angle_loss1,angle_loss2)
             w_loss = loss(w_pred,wgt)
-            total_loss = 10 * center_loss + cos_loss + sin_loss +  w_loss * 10
+            #total_loss = center_loss
+            total_loss = 10 * center_loss + angle_loss +  w_loss * 10
             total_loss = total_loss / batch_size
             print("--------- Epoch {} ---------".format(epoch))
             print("Angle loss", (cos_loss + sin_loss)/float(batch_size) ) 
@@ -318,7 +333,13 @@ for epoch in range(epochs) :
         else : 
             ptleft_loss = loss(point_left_pred,point_leftgt) / float(batch_size)
             ptright_loss = loss(point_right_pred,point_rightgt) / float(batch_size)
-            total_loss = ptleft_loss + ptright_loss
+            point_loss1 = ptleft_loss + ptright_loss
+            
+            ptleft_loss = loss(point_left_pred,point_leftgt2) / float(batch_size)
+            ptright_loss = loss(point_right_pred,point_rightgt2) / float(batch_size)
+            point_loss2 = ptleft_loss + ptright_loss
+            
+            total_loss = min(point_loss1,point_loss2)
             print("--------- Epoch {} ---------".format(epoch))
             print("Left Point loss", ptleft_loss ) 
             print("Right Point loss",ptright_loss) 
@@ -338,11 +359,18 @@ for epoch in range(epochs) :
             w = augmented_gknet_label[i][4] * image_size
             x,y = augmented_gknet_label[i][0] *  image_size, augmented_gknet_label[i][1] * image_size
             angle = math.atan2(augmented_gknet_label[i][3],augmented_gknet_label[i][2])
+            angle2 = math.atan2(augmented_gknet_label2[i][3],augmented_gknet_label2[i][2])
             #angle = math.radians(augmented_gknet_label[i][5])
-            lx,ly = x - w/2., y
-            rx,ry = x + w/2., y 
-            lx,ly = dataset.rotated_about(lx,ly,x,y,angle)
-            rx,ry = dataset.rotated_about(rx,ry,x,y,angle)
+            lx1,ly1 = x - w/2., y
+            rx1,ry1 = x + w/2., y 
+            lx,ly = dataset.rotated_about(lx1,ly1,x,y,angle)
+            rx,ry = dataset.rotated_about(rx1,ry1,x,y,angle)
+            
+            lx2,ly2 = dataset.rotated_about(lx1,ly1,x,y,angle2)
+            rx2,ry2 = dataset.rotated_about(rx1,ry1,x,y,angle2)
+            
+            
+            
             if ANGLE_MODE == True :
                 wp = w_pred[i] * image_size
                 xt,yt = center_pred[i][0] *  image_size ,center_pred[i][1] * image_size
@@ -355,10 +383,18 @@ for epoch in range(epochs) :
             else : 
                 lx,ly = point_leftgt[i][0] *  image_size ,point_leftgt[i][1] * image_size
                 rx,ry = point_rightgt[i][0] *  image_size ,point_rightgt[i][1] * image_size
+                lx2,ly2 = point_leftgt2[i][0] *  image_size ,point_leftgt2[i][1] * image_size
+                rx2,ry2 = point_rightgt2[i][0] *  image_size ,point_rightgt2[i][1] * image_size
                 rx = rx.cpu().detach()
                 ry = ry.cpu().detach()
                 lx = lx.cpu().detach()
                 ly = ly.cpu().detach()
+                
+                rx2 = rx2.cpu().detach()
+                ry2 = ry2.cpu().detach()
+                lx2 = lx2.cpu().detach()
+                ly2 = ly2.cpu().detach()
+                
                 
                 lxt,lyt = point_left_pred[i][0] *  image_size, point_left_pred[i][1] * image_size
                 rxt, ryt = point_right_pred[i][0] *  image_size ,point_right_pred[i][1] * image_size
@@ -388,6 +424,8 @@ for epoch in range(epochs) :
             axs['B'].imshow(denorm_torch_to_pil(augmented_img[i].cpu()))
             axs['B'].scatter([lx],[ly],color='red',s=3)
             axs['B'].scatter([rx],[ry],color='green',s=3)
+            axs['B'].scatter([lx2],[ly2],color='red',s=3)
+            axs['B'].scatter([rx2],[ry2],color='green',s=3)
             if ANGLE_MODE == True :
                 axs['B'].scatter([x.cpu().detach()],[y.cpu().detach()],color='cyan',s=3)
                 

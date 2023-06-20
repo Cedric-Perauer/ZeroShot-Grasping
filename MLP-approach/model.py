@@ -212,7 +212,7 @@ class GraspTransformer(nn.Module):
                 #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
                 return point_left, point_right , img_feats_raw, augmented_feats_raw
             
-            
+ 
             
             
             
