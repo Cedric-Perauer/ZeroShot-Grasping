@@ -77,7 +77,7 @@ device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('
 # ---------------
 image_norm_mean = (0.485, 0.456, 0.406)
 image_norm_std = (0.229, 0.224, 0.225)
-image_size = 840
+image_size = 840 
     
     
     
@@ -171,6 +171,7 @@ ANGLE_MODE = True
 MODE = 'similarity' #similiarity on or off -> off -> normal MLP is used
 MODE = 'naive' #similiarity on or off -> off -> normal MLP is used
 MODE = 'resnet' #similiarity on or off -> off -> normal MLP is used
+MODE = 'attention'
 '''
 angle_mode = True : uses the angle representation (x,y,theta_cos,theta_sin,w)
 angle_mode = False : uses the grasp point representation (xl,yl,xr,yr)
@@ -182,6 +183,7 @@ vis_every = 10 #vis one train sample every 30 interations
 
 model = GraspTransformer(angle_mode=ANGLE_MODE,img_size=image_size)
 model = model.to(device)
+model.train()
 
 print("load data")
 dataset = TestDataset(image_transform=image_transform,num_targets=args.n_target,vis=True,crop=CROP)
@@ -284,7 +286,9 @@ for epoch in range(epochs) :
             elif MODE == 'naive' : 
                 center_pred,theta_cos_pred,theta_sin_pred,w_pred,img_feats, augemented_feats = model.forward_naive(img,augmented_img,gknet_label)
             elif MODE == 'resnet': 
-                center_pred,theta_cos_pred,theta_sin_pred,w_pred,img_feats, augemented_feats = model.forward_new(img,augmented_img,gknet_label)
+                center_pred,theta_cos_pred,theta_sin_pred,w_pred,img_feats, augemented_feats = model.forward_pca(img,augmented_img,gknet_label)
+            elif MODE == 'attention': 
+                center_pred,theta_cos_pred,theta_sin_pred,w_pred,img_feats, augemented_feats = model.forward_attention(img,augmented_img,gknet_label)
             
             centergt,theta_cosgt,theta_singt,wgt = augmented_gknet_label[:,:2], augmented_gknet_label[:,2],\
                                                     augmented_gknet_label[:,3], augmented_gknet_label[:,4]
@@ -298,7 +302,7 @@ for epoch in range(epochs) :
             elif MODE == 'naive' : 
                 point_left_pred, point_right_pred, img_feats, augemented_feats  = model.forward_naive(img,augmented_img,points_grasp.reshape(points_grasp.shape[0],4))
             elif MODE == 'resnet': 
-                point_left_pred, point_right_pred, img_feats, augemented_feats = model.forward_new(img,augmented_img,gknet_label)
+                point_left_pred, point_right_pred, img_feats, augemented_feats = model.forward_pca(img,augmented_img,gknet_label)
             point_leftgt, point_rightgt = points_grasp_augmented[:,0].to(torch.float32) /  image_size, points_grasp_augmented[:,1].to(torch.float32)/  image_size
             point_leftgt2, point_rightgt2 = points_grasp_augmented2[:,0].to(torch.float32) /  image_size, points_grasp_augmented2[:,1].to(torch.float32)/  image_size
             
@@ -433,46 +437,53 @@ for epoch in range(epochs) :
                 axs['B'].scatter([x.cpu().detach()],[y.cpu().detach()],color='cyan',s=3)
                 
             #attentions = model.dinov2d_backbone.get_last_selfattention(img) 
-            import pdb; pdb.set_trace()
             
-            img_feats = img_feats[i].cpu()
-            augmented_img_feats = augemented_feats[i].cpu()
-            total_features = torch.stack([img_feats, augmented_img_feats]).reshape(-1,384).numpy()
-            pca = PCA(n_components=3,random_state=42)
-            pca.fit(total_features)
-            pca_features = pca.transform(total_features)
-            pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
-                     (pca_features[:, 0].max() - pca_features[:, 0].min())
+            if MODE == "resnet":
+                img_feats = img_feats[i].cpu()
+                augmented_img_feats = augemented_feats[i].cpu()
+                total_features = torch.stack([img_feats, augmented_img_feats]).reshape(-1,384).numpy()
+                pca = PCA(n_components=3,random_state=42)
+                pca.fit(total_features)
+                pca_features = pca.transform(total_features)
+                pca_features[:, 0] = (pca_features[:, 0] - pca_features[:, 0].min()) / \
+                        (pca_features[:, 0].max() - pca_features[:, 0].min())
 
-            pca_features_img = pca_features.reshape(2, patch_h, patch_w, 3)
+                pca_features_img = pca_features.reshape(2, patch_h, patch_w, 3)
+                
+                img1 = pca_features[i * patch_h * patch_w: (i+1) * patch_h * patch_w,0].reshape(patch_h, patch_w)
+                img2 = pca_features[1 * patch_h * patch_w: (1+1) * patch_h * patch_w,0].reshape(patch_h, patch_w)
+                axs['C'].imshow(img1) 
+                axs['D'].imshow(img2) 
+                pca_features_bg = pca_features[:, 0] <= 0.35 # from first histogram
+                pca_features_fg = ~pca_features_bg
+                bg_num = sum(pca_features_bg)
+                fg_num = sum(pca_features_fg)
+                #if bg_num > fg_num:
+                #    pca_features_bg, pca_features_fg = pca_features_fg, pca_features_bg 
+                #import pdb; pdb.set_trace()
+                pca.fit(total_features[pca_features_fg]) 
+                pca_features_left = pca.transform(total_features[pca_features_fg])
+
+                for i in range(3):
+                    # min_max scaling
+                    pca_features_left[:, i] = (pca_features_left[:, i] - pca_features_left[:, i].min()) / (pca_features_left[:, i].max() - pca_features_left[:, i].min())
+
+                pca_features_rgb = pca_features.copy()
+                # for black background
+                pca_features_rgb[pca_features_bg] = 0
+                # new scaled foreground features
+                pca_features_rgb[pca_features_fg] = pca_features_left
+                pca_features_rgb = pca_features_rgb.reshape(2, patch_h, patch_w, 3)
+                
+                axs['E'].imshow(pca_features_rgb[0]) 
+                axs['F'].imshow(pca_features_rgb[1]) 
             
-            img1 = pca_features[i * patch_h * patch_w: (i+1) * patch_h * patch_w,0].reshape(patch_h, patch_w)
-            img2 = pca_features[1 * patch_h * patch_w: (1+1) * patch_h * patch_w,0].reshape(patch_h, patch_w)
-            axs['C'].imshow(img1) 
-            axs['D'].imshow(img2) 
-            pca_features_bg = pca_features[:, 0] <= 0.35 # from first histogram
-            pca_features_fg = ~pca_features_bg
-            bg_num = sum(pca_features_bg)
-            fg_num = sum(pca_features_fg)
-            #if bg_num > fg_num:
-            #    pca_features_bg, pca_features_fg = pca_features_fg, pca_features_bg 
-            #import pdb; pdb.set_trace()
-            pca.fit(total_features[pca_features_fg]) 
-            pca_features_left = pca.transform(total_features[pca_features_fg])
-
-            for i in range(3):
-                # min_max scaling
-                pca_features_left[:, i] = (pca_features_left[:, i] - pca_features_left[:, i].min()) / (pca_features_left[:, i].max() - pca_features_left[:, i].min())
-
-            pca_features_rgb = pca_features.copy()
-            # for black background
-            pca_features_rgb[pca_features_bg] = 0
-            # new scaled foreground features
-            pca_features_rgb[pca_features_fg] = pca_features_left
-            pca_features_rgb = pca_features_rgb.reshape(2, patch_h, patch_w, 3)
-            
-            axs['E'].imshow(pca_features_rgb[0]) 
-            axs['F'].imshow(pca_features_rgb[1]) 
+            elif MODE == 'attention':
+                axs['C'].imshow(img_feats[0,0].cpu().numpy()) 
+                axs['D'].imshow(augemented_feats[0,0].cpu().numpy()) 
+                
+                axs['E'].imshow(img_feats[0,1].cpu().numpy()) 
+                axs['F'].imshow(augemented_feats[0,1].cpu().numpy()) 
             '''
             pca = PCA(n_components=3)
             pca.fit(img_feats)

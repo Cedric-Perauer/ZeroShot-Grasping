@@ -3,6 +3,7 @@ import torch.nn as nn
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import torchvision.models as models 
+from dinov2.models.vision_transformer import vit_small, vit_large
 
 
 class VisionLayer(nn.Module):
@@ -31,9 +32,18 @@ class GraspTransformer(nn.Module):
             self.angle_mode = angle_mode
             self.feature_layers = feature_layers
             #vit14s had 11 layers max
-            self.dinov2d_backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+            #self.dinov2d_backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+            self.dinov2d_backbone = vit_small(
+                    patch_size=14,
+                    img_size=526,
+                    init_values=1.0,
+                    #ffn_layer="mlp",
+                    block_chunks=0
+            )
+            self.dinov2d_backbone.load_state_dict(torch.load('dinov2_vits14_pretrain.pth'))
             ##freeze the dino layers
             self.nc = 16
+            self.patch_size = 14
             self.pca = PCA(n_components=3)
             self.tokenw = int(self.img_size/14.)
             self.tokenh = int(self.img_size/14.)
@@ -48,10 +58,13 @@ class GraspTransformer(nn.Module):
             
             self.out_params = 5 if self.angle_mode else 4
             self.resnet = models.resnet18(pretrained=True)
+            #self.resnet50 = models.resnet50(pretrained=True)
             self.resnet.fc = nn.Identity()
+            #self.resnet50.fc = nn.Identity()
             
             
             self.conv1 = VisionLayer(384,3,self.tokenw,self.tokenh)
+            self.convC = VisionLayer(6,3,self.img_size,self.img_size)
             
             if SIM == False : 
                 self.input_dim_naive = self.out_params + self.tokenw * self.tokenh * self.nc * 2
@@ -145,7 +158,7 @@ class GraspTransformer(nn.Module):
                 #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
                 return point_left, point_right, img_feats_raw, augmented_feats_raw 
         
-        def forward_new(self,img, img_augmented,grasp_label):     
+        def forward_pca(self,img, img_augmented,grasp_label):     
             '''
             forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
             this feature vector is then feed through an MLP to get the grasp position in the augmented image 
@@ -179,7 +192,6 @@ class GraspTransformer(nn.Module):
                 augmented_feats_raw_re = augmented_feats_raw.reshape(img_feats_raw.shape[0],384,im_dim,im_dim)
                 pca_features = self.resnet(self.conv1(img_feats_raw_re))
                 pca_features_augmented = self.resnet(self.conv1(augmented_feats_raw_re)) 
-                #import pdb; pdb.set_trace()
             
             ml_input = torch.cat([pca_features,pca_features_augmented,grasp_label],dim=-1)
             mlp_forward = self.mlp_head_resnet(ml_input)
@@ -195,6 +207,48 @@ class GraspTransformer(nn.Module):
                 #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
                 return point_left, point_right, img_feats_raw, augmented_feats_raw 
             
+        def forward_attention(self,img, img_augmented,grasp_label):     
+            '''
+            forward image and augmented image through the dinov2 backbone and fuse it with the grasp label 
+            this feature vector is then feed through an MLP to get the grasp position in the augmented image 
+            '''
+            
+            attentions_img = self.dinov2d_backbone.get_last_self_attention(img)
+            attentions_aug_img = self.dinov2d_backbone.get_last_self_attention(img_augmented)
+            nh = attentions_img.shape[1] # number of head
+            attentions_img = attentions_img[0, :, 0, 1:].reshape(nh, -1)
+            attentions_aug_img = attentions_aug_img[0, :, 0, 1:].reshape(nh, -1)
+            # weird: one pixel gets high attention over all heads?
+            #attentions_img[:, 283] = 0 
+            #attentions_aug_img[:,283] = 0
+            
+            w_featmap, h_featmap = img.shape[2] // self.patch_size, img.shape[3] // self.patch_size 
+            
+            attentions_img = attentions_img.reshape(nh, w_featmap, h_featmap)
+            attentions_img = nn.functional.interpolate(attentions_img.unsqueeze(0), scale_factor=self.patch_size, mode="nearest")
+            
+            attentions_aug_img = attentions_aug_img.reshape(nh, w_featmap, h_featmap)
+            attentions_aug_img = nn.functional.interpolate(attentions_aug_img.unsqueeze(0), scale_factor=self.patch_size, mode="nearest")
+            
+            img_features = self.resnet(self.convC(attentions_img))
+            features_augmented = self.resnet(self.convC(attentions_aug_img))
+            
+            ml_input = torch.cat([img_features,features_augmented,grasp_label],dim=-1)
+            mlp_forward = self.mlp_head_resnet(ml_input)
+            
+            #import pdb; pdb.set_trace()
+            
+            if self.angle_mode == True : 
+                center,theta_cos,theta_sin,w = mlp_forward[:,:2],  mlp_forward[:,2], mlp_forward[:,3],mlp_forward[:,4]
+                center = nn.Sigmoid()(center)
+                #theta_cos = nn.Tanh()(theta_cos)
+                #theta_sin = nn.Tanh()(theta_sin)
+                w = nn.Sigmoid()(w)
+                return center,theta_cos,theta_sin,w, attentions_img, attentions_aug_img
+            else : 
+                point_left, point_right = mlp_forward[:,:2], mlp_forward[:,2:]
+                #point_left,point_right = nn.Sigmoid()(point_left), nn.Sigmoid()(point_right)
+                return point_left, point_right, attentions_img, attentions_aug_img 
             
         def forward_similarity(self,img, img_augmented,grasp_label):     
             '''

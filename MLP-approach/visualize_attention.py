@@ -57,7 +57,7 @@ if __name__ == '__main__':
     model.to(device)
     model.eval()
 
-    img = Image.open('fence.png')
+    img = Image.open('chair.png')
     img = img.convert('RGB')
     transform = pth_transforms.Compose([
         pth_transforms.Resize(image_size),
@@ -89,7 +89,6 @@ if __name__ == '__main__':
 
     attentions = attentions.reshape(nh, w_featmap, h_featmap)
     attentions = nn.functional.interpolate(attentions.unsqueeze(0), scale_factor=patch_size, mode="nearest")[0].cpu().numpy()
-
     # save attentions heatmaps
     os.makedirs(output_dir, exist_ok=True)
 
