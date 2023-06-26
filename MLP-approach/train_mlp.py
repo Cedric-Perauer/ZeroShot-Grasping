@@ -13,8 +13,8 @@ from matplotlib.patches import Polygon
 import cv2
 import math
 import shutil
-import einops
-from einops import repeat
+#import einops
+#from einops import repeat
 from dataset_reference import TestDataset
 from dataset_augment import AugmentDataset
 from model import GraspTransformer
