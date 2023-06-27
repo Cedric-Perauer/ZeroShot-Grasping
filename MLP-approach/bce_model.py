@@ -29,11 +29,23 @@ class BCEGraspTransformer(nn.Module):
             nn.Linear(output_dim, 1),
             nn.Sigmoid()
         )
+        
+        self.linear_headvalid = nn.Sequential(
+            nn.Linear(int_dim, output_dim),
+            nn.ReLU(),
+            nn.Linear(output_dim, 1),
+            nn.Sigmoid()
+        )
+        
     def forward_dino_features(self, img):
         return self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
 
     def forward(self, feats, diffs):
         f_reduce = self.linear_head(feats)
         return self.linear_head2(torch.cat([f_reduce, diffs], dim=1))
+    
+    def forward_valid(self, feats):
+        f_reduce = self.linear_head(feats)
+        return self.linear_headvalid(f_reduce)
 
 
