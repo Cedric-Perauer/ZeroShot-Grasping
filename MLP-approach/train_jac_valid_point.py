@@ -3,7 +3,7 @@ import numpy as np
 from dataset_jacquard_samples import JacquardSamples
 from utils import get_transform, augment_image
 from bce_model import BCEGraspTransformer
-from utils_train import create_correct_false_points
+from utils_train import create_correct_false_points_mask
 import random
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -31,12 +31,11 @@ def train(dataset, model, args_train, device):
         for i in range(args_train["num_images"]):
             optim.zero_grad()
             data = dataset[i]
+            mask = data["mask"].to(device)
             img = data["img"].to(device)
             img = torch.permute(img, (0, 2, 1))
             grasp = data["points_grasp"]//14
-            grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
-            grasp = torch.cat([grasp, grasp_inv], dim=0)
-            false_points = create_correct_false_points(grasp, args_train["batch_size"])
+            false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask)
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features = model.forward_dino_features(img.unsqueeze(0)).squeeze().reshape(60, 60, 384)
@@ -83,7 +82,7 @@ def train(dataset, model, args_train, device):
 
 
 def main(args_train):
-    device = torch.device(args_train["device"])
+    device = torch.device(args_train["device"]) if torch.cuda.is_available() else torch.device("cpu")
     image_transform = get_transform()
     model = BCEGraspTransformer(img_size=args_train['img_size'],int_dim=256,output_dim=128)
     dataset = JacquardSamples(image_transform=image_transform, num_targets=5, overfit=False,

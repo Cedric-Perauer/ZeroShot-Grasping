@@ -14,6 +14,16 @@ def get_transform():
         transforms.Normalize(mean=image_norm_mean, std=image_norm_std)
     ])
     return image_transform
+
+def get_transform_mask():
+    image_size = 840
+    image_transform = transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+    ])
+    return image_transform
+
+
 def get_inv_transform():
     invTrans = transforms.Compose([transforms.Normalize(mean=[0., 0., 0.],
                                                         std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),

@@ -6,7 +6,7 @@ from torchvision import transforms
 import os
 from PIL import Image
 import random
-from utils import get_grasp, get_augmented_angles
+from utils import get_grasp, get_augmented_angles, get_transform_mask
 
 jacquard_root  =os.getcwd()+ r'/Jacquard_fence/Samples/'
 
@@ -22,6 +22,7 @@ class JacquardSamples(Dataset):
         self.img_size = img_size
         self.dataset_root = dataset_root
         self.image_transform = image_transform
+        self.mask_transform = get_transform_mask()
         self.classes = os.listdir(dataset_root)
         self.image_norm_mean = (0.485, 0.456, 0.406)
         self.image_norm_std = (0.229, 0.224, 0.225)
@@ -40,7 +41,9 @@ class JacquardSamples(Dataset):
             imgs = sorted(imgs, key=lambda x: int(x.split('_')[0]))
             grasp_txts = sorted(grasp_txts, key=lambda x: int(x.split('_')[0]))
             imgs = [self.dataset_root + cat + "/" + i for i in imgs]
+            img_masks = [i.replace('RGB', 'mask') for i in imgs]
             grasp_txts = [self.dataset_root + cat + "/" + i for i in grasp_txts]
+        self.mask_paths = img_masks
         self.image_paths = imgs
         self.grasp_txts = grasp_txts
 
@@ -51,13 +54,16 @@ class JacquardSamples(Dataset):
     def __getitem__(self, index):
         data_dict = {}
         img_raw = Image.open(self.image_paths[index])
+        mask = Image.open(self.mask_paths[index])
         img = self.image_transform(img_raw)
+        mask = self.mask_transform(mask)
 
         points_grasps, gknet_labels = get_grasp(self.grasp_txts[index], self.img_size, self.crop)
         points_grasps = torch.tensor(points_grasps).squeeze()
         gknet_labels = torch.tensor(gknet_labels).squeeze()
         data_dict['points_grasp'] = torch.tensor(points_grasps)
         data_dict['img'] = img
+        data_dict['mask'] = mask
         data_dict['angle'] = []
         data_dict['img_grasp'] = []
         data_dict['points_grasp_augmented'] = []
