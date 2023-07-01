@@ -9,7 +9,7 @@ args_train = {
     "lr": 1e-3,
     "batch_size": 64,
     "print_every_n": 1,
-    "experiment_name": "bce_grasp"
+    "experiment_name": "bce_grasp_entry"
 }
 
 main(args_train)
