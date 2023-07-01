@@ -2,7 +2,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+*.tiff 
+Jacquard*
 # C extensions
 *.so
 
@@ -151,7 +152,12 @@ dmypy.json
 
 # pytype static type analyzer
 .pytype/
-
+*.pth 
+*.pt 
+runs/
+logs/
+*.png 
+*.txt 
 # Cython debug symbols
 cython_debug/
 
