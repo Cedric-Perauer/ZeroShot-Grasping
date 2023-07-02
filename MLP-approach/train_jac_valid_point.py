@@ -25,6 +25,8 @@ def train(dataset, model, args_train, device):
     train_loss_running = 0.
     model.to(device)
     logger = TensorBoardLogger("logs", name=args_train['experiment_name'])
+    IMAGE_SIZE = 1120 
+    PATCH_DIM = IMAGE_SIZE // 14
     iter = 0.
     tot_iter = 0
     for epoch in range(args_train["num_epochs"]):
@@ -35,10 +37,10 @@ def train(dataset, model, args_train, device):
             img = data["img"].to(device)
             img = torch.permute(img, (0, 2, 1))
             grasp = data["points_grasp"]//14
-            false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask)
+            false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask,img,VIS=False)
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
-            features = model.forward_dino_features(img.unsqueeze(0)).squeeze().reshape(60, 60, 384)
+            features = model.forward_dino_features(img.unsqueeze(0)).squeeze().reshape(PATCH_DIM, PATCH_DIM, 384)
             mean_feats=[]
             patch_area = 1
             for i in range(all_points.shape[0]):
@@ -78,7 +80,8 @@ def train(dataset, model, args_train, device):
                     'iter': tot_iter
                 }, tot_iter)
                 train_loss_running = 0.
-    torch.save(model.state_dict(), f'runs/grasp_valid.ckpt')
+        if epoch % args_train['save_every'] == 0 : 
+            torch.save(model.state_dict(), f'runs/grasp_entry_point_{epoch}.ckpt')
 
 
 def main(args_train):

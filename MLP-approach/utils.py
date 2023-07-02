@@ -4,10 +4,12 @@ import torchvision.transforms.functional as TF
 import math
 from torchvision import transforms
 
+IMAGE_SIZE = 1120 
+
 def get_transform():
     image_norm_mean = (0.485, 0.456, 0.406)
     image_norm_std = (0.229, 0.224, 0.225)
-    image_size = 840
+    image_size = IMAGE_SIZE
     image_transform = transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
@@ -16,7 +18,7 @@ def get_transform():
     return image_transform
 
 def get_transform_mask():
-    image_size = 840
+    image_size = IMAGE_SIZE
     image_transform = transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),

@@ -38,7 +38,8 @@ class BCEGraspTransformer(nn.Module):
         )
         
     def forward_dino_features(self, img):
-        return self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+        feats =  self.dinov2d_backbone.forward_features(img)['x_norm_patchtokens']
+        return feats
 
     def forward(self, feats, diffs):
         f_reduce = self.linear_head(feats)
