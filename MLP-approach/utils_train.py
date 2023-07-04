@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from utils import get_transform, get_inv_transform
+import time 
 
 IMAGE_SIZE = 1120
 PATCH_DIM = IMAGE_SIZE  // 14
@@ -27,16 +28,9 @@ def check_and_remove_tensors(a, b):
     return b
 
 def check_and_remove_tensors2(a, b):
-    # Calculate element-wise inequality
-    unequal_tensors = torch.all(torch.ne(a[:, None], b), dim=2)
-
-    # Find indices where no tensor in a matches with any tensor in b
-    indices_to_keep = torch.all(unequal_tensors, dim=0)
-
-    # Filter tensors in b based on the indices
-    filtered_b = b[indices_to_keep]
-
-    return filtered_b
+    mask = ~torch.all(torch.eq(b.unsqueeze(1), a), dim=-1).any(dim=1)
+    b = b[mask]
+    return b
 
 def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     inv_transform = get_inv_transform()
@@ -48,12 +42,14 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     one_indices = torch.nonzero(mask[0] == 1)  
     reshaped_grasps = grasp.reshape(-1,2)
 
-    false_points_object = check_and_remove_tensors(reshaped_grasps, one_indices) ##make sure that no gt grasps are contained due to feature overlap 
+    #start = time.time()
+    false_points_object = check_and_remove_tensors2(reshaped_grasps, one_indices) ##make sure that no gt grasps are contained due to feature overlap 
     false_points_object = extract_random_elements(false_points_object, bs)
     
-    false_points_grasp = check_and_remove_tensors(reshaped_grasps, zero_indices) ##make sure that no gt grasps are contained due to feature overlap 
+    false_points_grasp = check_and_remove_tensors2(reshaped_grasps, zero_indices) ##make sure that no gt grasps are contained due to feature overlap 
     false_points_grasp = extract_random_elements(false_points_grasp, bs)
-    
+    #end = time.time() - start 
+    #print("sampling took ", end * 1000 ," ms")
     
     ## vis the data 
     if VIS : 
