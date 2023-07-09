@@ -37,10 +37,12 @@ def train(dataset, model, args_train, device):
             img = data["img"].to(device)
             img = torch.permute(img, (0, 2, 1))
             grasp = data["points_grasp"]//14
+            grasp = grasp.to(device)
             false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask,img,VIS=False)
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
-            features = model.forward_dino_features(img.unsqueeze(0)).squeeze().reshape(PATCH_DIM, PATCH_DIM, 384)
+            features, _ = model.forward_dino_features(img.unsqueeze(0))
+            features = features.squeeze().reshape(PATCH_DIM, PATCH_DIM, 384)
             mean_feats=[]
             patch_area = 1
             for i in range(all_points.shape[0]):

@@ -38,9 +38,15 @@ def train(dataset, model, args_train, device):
             false_points = create_correct_false_points(grasp, args_train["batch_size"])
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
-            features = model.forward_dino_features(img.unsqueeze(0)).squeeze().reshape(60, 60, 384)
+            features, clk = model.forward_dino_features(img.unsqueeze(0))
+            attn = model.forward_dino_attentions(img.unsqueeze(0)).squeeze()[:,0,1:]
+            attn_norms = torch.norm(attn, dim=0).reshape(args_train["img_size"]//14, args_train["img_size"]//14)
+
+            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 384)
+            features = features * attn_norms.unsqueeze(2)
             mean_feats=[]
             diffs = []
+
             for i in range(all_points.shape[0]):
                 imix = all_points[i,:,0].min()
                 imax = all_points[i,:,0].max()
@@ -53,7 +59,9 @@ def train(dataset, model, args_train, device):
                     dif = dif / dif.norm(p=2, dim=-1, keepdim=True)
                     dif = torch.cat([dif, dif*-1])
                 features_i = features[imix:imax+1, ymix:ymax+1, :]
-                features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)
+                attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
+                features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)/attn_i
+                #features_i = torch.cat([features_i, clk.squeeze()], dim=0)
                 if i == 0:
                     mean_feats = features_i.unsqueeze(0)
                     diffs = dif.unsqueeze(0)
@@ -100,7 +108,7 @@ def train(dataset, model, args_train, device):
 def main(args_train):
     device = torch.device(args_train["device"])
     image_transform = get_transform()
-    model = BCEGraspTransformer(img_size=840)
+    model = BCEGraspTransformer(img_size=args_train["img_size"])
     dataset = JacquardSamples(image_transform=image_transform, num_targets=5, overfit=False,
                               img_size=args_train["img_size"])
     train(dataset, model, args_train, device)

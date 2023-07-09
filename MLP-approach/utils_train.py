@@ -43,10 +43,10 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     reshaped_grasps = grasp.reshape(-1,2)
 
     #start = time.time()
-    false_points_object = check_and_remove_tensors2(reshaped_grasps, one_indices) ##make sure that no gt grasps are contained due to feature overlap 
+    false_points_object = check_and_remove_tensors2(reshaped_grasps, one_indices) ##make sure that no gt grasps are contained due to feature overlap
     false_points_object = extract_random_elements(false_points_object, bs)
     
-    false_points_grasp = check_and_remove_tensors2(reshaped_grasps, zero_indices) ##make sure that no gt grasps are contained due to feature overlap 
+    false_points_grasp = check_and_remove_tensors2(reshaped_grasps, zero_indices) ##make sure that no gt grasps are contained due to feature overlap
     false_points_grasp = extract_random_elements(false_points_grasp, bs)
     #end = time.time() - start 
     #print("sampling took ", end * 1000 ," ms")
@@ -119,7 +119,7 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     
 def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
     false_points_mask = create_false_points_mask(grasp,mask,bs,img,VIS).reshape(-1,2,2)
-    return false_points_mask    
+    return false_points_mask
     
 
 def create_correct_false_points(grasp, bs):

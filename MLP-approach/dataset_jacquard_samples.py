@@ -8,7 +8,7 @@ from PIL import Image
 import random
 from utils import get_grasp, get_augmented_angles, get_transform_mask
 
-jacquard_root  =os.getcwd()+ r'/Jacquard_fence/Samples/'
+jacquard_root  =os.getcwd()+ r'/data/Bottle/'
 
 
 class JacquardSamples(Dataset):
@@ -18,7 +18,7 @@ class JacquardSamples(Dataset):
 
     def __init__(self, dataset_root=jacquard_root,
                  image_transform=None,
-                 num_targets=1, crop=False, overfit=False, img_size=224):
+                 num_targets=2, crop=False, overfit=False, img_size=224):
         self.img_size = img_size
         self.dataset_root = dataset_root
         self.image_transform = image_transform
@@ -29,7 +29,7 @@ class JacquardSamples(Dataset):
         self.crop = crop
         self.overfit = overfit
         for num_c, cat in enumerate(self.classes):
-            if os.path.isdir(self.dataset_root + cat) == False:
+            if os.path.isdir(self.dataset_root + cat) == False or num_c != num_targets:
                 continue
             fs = os.listdir(self.dataset_root + cat)
 
