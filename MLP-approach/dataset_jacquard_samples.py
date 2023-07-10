@@ -29,7 +29,7 @@ class JacquardSamples(Dataset):
         self.crop = crop
         self.overfit = overfit
         for num_c, cat in enumerate(self.classes):
-            if os.path.isdir(self.dataset_root + cat) == False or num_c != num_targets:
+            if os.path.isdir(self.dataset_root + cat) == False :
                 continue
             fs = os.listdir(self.dataset_root + cat)
 

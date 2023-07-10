@@ -4,7 +4,7 @@ args_train = {
     "device": "cuda",
     "angle_mode": False,
     "img_size": 1120,
-    "num_epochs": 250,
+    "num_epochs": 301,
     "num_images": 4,
     "lr": 1e-4,
     "batch_size": 32,

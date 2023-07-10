@@ -32,6 +32,7 @@ def train(dataset, model, args_train, device):
             data = dataset[i]
             img = data["img"].to(device)
             img = torch.permute(img, (0, 2, 1))
+            mask = data["mask"].sum().sqrt().to(device)
             grasp = data["points_grasp"]//14
             grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
             grasp = torch.cat([grasp, grasp_inv], dim=0)
@@ -39,38 +40,33 @@ def train(dataset, model, args_train, device):
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
-            attn = model.forward_dino_attentions(img.unsqueeze(0)).squeeze()[:,0,1:]
-            attn_norms = torch.norm(attn, dim=0).reshape(args_train["img_size"]//14, args_train["img_size"]//14)
+            #attn = model.forward_dino_attentions(img.unsqueeze(0)).squeeze()[:,0,1:]
+            #attn_norms = torch.norm(attn, dim=0).reshape(args_train["img_size"]//14, args_train["img_size"]//14)
 
             features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 384)
-            features = features * attn_norms.unsqueeze(2)
+            #features = features * attn_norms.unsqueeze(2)
             mean_feats=[]
             diffs = []
-
+            dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
+            #dif_gt_mean = dif[:args_train["batch_size"]].mean()
+            dif_n = (dif/mask).unsqueeze(1)
+            #print(dif_n)
             for i in range(all_points.shape[0]):
                 imix = all_points[i,:,0].min()
                 imax = all_points[i,:,0].max()
                 ymix = all_points[i,:,1].min()
                 ymax = all_points[i,:,1].max()
-                dif = (all_points[i, 0, :] - all_points[i, 1, :]).type(torch.float32)
-                if dif[0] == 0 and dif[1] == 0:
-                    dif = torch.zeros(4).to(device)
-                else:
-                    dif = dif / dif.norm(p=2, dim=-1, keepdim=True)
-                    dif = torch.cat([dif, dif*-1])
                 features_i = features[imix:imax+1, ymix:ymax+1, :]
-                attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
-                features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)/attn_i
+                #attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
+                features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)
                 #features_i = torch.cat([features_i, clk.squeeze()], dim=0)
                 if i == 0:
                     mean_feats = features_i.unsqueeze(0)
-                    diffs = dif.unsqueeze(0)
                 else:
                     mean_feats = torch.cat([mean_feats, features_i.unsqueeze(0)], dim=0)
-                    diffs = torch.cat([diffs, dif.unsqueeze(0)], dim=0)
 
             gt = torch.cat([torch.ones(args_train["batch_size"]), torch.zeros(args_train["batch_size"])]).to(device)
-            pred = model(mean_feats, diffs).squeeze()
+            pred = model(mean_feats, dif_n).squeeze()
             loss = loss_bce(pred, gt)
             loss.backward()
             optim.step()

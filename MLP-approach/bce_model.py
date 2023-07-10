@@ -24,7 +24,7 @@ class BCEGraspTransformer(nn.Module):
             nn.ReLU(),
         )
         self.linear_head2 = nn.Sequential(
-            nn.Linear(int_dim+4, output_dim),
+            nn.Linear(int_dim+1, output_dim),
             nn.ReLU(),
             nn.Linear(output_dim, 1),
             nn.Sigmoid()
