@@ -85,6 +85,7 @@ def create_grasp_rectangle(grasp):
         gripper_poses.append(gripper_points)
         # br,tr,tl,bl = square_vertices
     # import pdb; pdb.set_trace()
+    #print(grasps[0])
     return grasps, centers, gripper_poses
 
 
@@ -113,7 +114,7 @@ def get_grasp(grasp_txt, img_size, crop):
             grasping_labels.append(grasps)
             gripper_labels.append(gripper_points)
             out_grasps.append(grasp)
-        return np.array(gripper_labels), np.array(out_grasps)
+        return np.array(gripper_labels), np.array(out_grasps), np.array(grasping_labels)
 
 def augment_image(image, angle=10):
     ##rotate the image
