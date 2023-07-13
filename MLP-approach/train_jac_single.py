@@ -3,7 +3,7 @@ import numpy as np
 from dataset_jacquard_samples import JacquardSamples
 from utils import get_transform, augment_image
 from bce_model import BCEGraspTransformer
-from utils_train import create_correct_false_points
+from utils_train import create_correct_false_points, create_correct_false_points_mask
 import random
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -33,9 +33,12 @@ def train(dataset, model, args_train, device):
             img = data["img"].to(device)
             img = torch.permute(img, (0, 2, 1))
             mask = data["mask"].sum().sqrt().to(device)
+            mask_standard = data["mask"].to(device)
             grasp = data["points_grasp"]//14
+            #false_points = create_correct_false_points_mask(grasp.to(device), args_train["batch_size"],mask_standard,img,VIS=False)
             grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
             grasp = torch.cat([grasp, grasp_inv], dim=0)
+            #false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask_standard,img,VIS=False)
             false_points = create_correct_false_points(grasp, args_train["batch_size"])
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)

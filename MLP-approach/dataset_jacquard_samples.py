@@ -48,6 +48,8 @@ class JacquardSamples(Dataset):
         self.mask_paths = img_masks
         self.image_paths = imgs
         self.grasp_txts = grasp_txts
+        if (len(self.image_paths) == len(self.grasp_txts) == len(self.mask_paths)) == False:
+            raise Exception("Number of images and grasp files do not match")
 
 
     def __len__(self):

@@ -259,9 +259,20 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
                     corner_points, corner_points_pred, correct, iou, angle_diff = grasp_correct_full(single_point, pred_point, 
                                                                     grasp_cur,height /2. * args_infer["img_size"] )
                     
+                    for pt in grasp_cur : 
+                        new_x = int(pt[0]) 
+                        new_y = int(pt[1])
+                        boarder = 2
+                        origin_point[:,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.zeros((3,boarder*2,boarder*2)) 
+                        origin_point[2,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.ones((boarder*2,boarder*2)) 
                     
                     if correct == True :
                         correct_end = True
+                        best_corner_pts = corner_points.clone()
+                        best_corner_preds = corner_points_pred.clone()
+                        best_iou = iou
+                        best_angle_diff = angle_diff
+                        
                     
                     if correct_end == True :
                         if iou > best_iou and correct == True :
@@ -300,7 +311,7 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
         
         #origin_point[:,single_point[0] - 2 : single_point[0] + 2 , single_point[1] - 2: single_point[1] + 2] = torch.ones((3,4,4)) * 0.5
         #origin_point[:,pred_point[0] - 2 : pred_point[0] + 2 , pred_point[1] - 2: pred_point[1] + 2] = torch.ones((3,4,4)) * 0.5
-        if correct_end == False : 
+        if True == True : 
             origin_point = torch.permute(origin_point,(1, 2, 0)).cpu().detach().numpy() + 0.2*preds_cp.cpu().detach().numpy()
             show_img = org_image + 0.7*preds.cpu().detach().numpy() + 0.7*origin_point
             #show_img = org_image + 0.7*origin_point2 + 0.7*origin_point
