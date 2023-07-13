@@ -106,10 +106,10 @@ def test_single_point_constraint(grasp, mask, device, features, model, args_infe
     dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
     dif_n = (dif / mask).unsqueeze(1)
     for i in range(all_points.shape[0]):
-        imix = all_points[i, :, 0].min()
-        imax = all_points[i, :, 0].max()
-        ymix = all_points[i, :, 1].min()
-        ymax = all_points[i, :, 1].max()
+        imix = int(all_points[i, :, 0].min().cpu())
+        imax = int(all_points[i, :, 0].max().cpu())
+        ymix = int(all_points[i, :, 1].min().cpu())
+        ymax = int(all_points[i, :, 1].max().cpu())
         features_i = features[imix:imax + 1, ymix:ymax + 1, :]
         # attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
         features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)
