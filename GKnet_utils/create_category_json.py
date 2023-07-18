@@ -18,7 +18,7 @@ labels_6_11_pth = pth + 'labels_0.5/'
 
 new_data = {}
 
-relevant_objects = ['9fb36e3b793183268853b066b4c501fc']
+relevant_objects = ['1a2a5a06ce083786581bb5a25b17bed6','1a4daa4904bb4a0949684e7f0bb99f9c','7cc130874942f2132e41f7ed9c5f7eed']
 
 new_data_pth = 'new_data/grasps_train2018/'
 new_labels_pth1 = 'new_data/train_annotations_0_5/'
@@ -48,7 +48,6 @@ new_data['licenses'] = data['licenses'].copy()
 new_data['categories'] = data['categories'].copy()    
 new_data['annotations'] = []
 new_data['images'] = []
-
 for relevant_object in relevant_objects:
 	img_ids = []
 	for idx in range(len(data['images'])):
