@@ -24,7 +24,6 @@ def oriented_bounding_box_iou(box1, box2):
     # Convert tensors to lists
     box1 = box1.tolist()
     box2 = box2.tolist()
-
     # Create polygons from the corner points
     poly1 = Polygon(box1)
     poly2 = Polygon(box2)

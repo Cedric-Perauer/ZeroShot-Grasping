@@ -41,7 +41,7 @@ def train(dataset, model, args_train, device):
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
 
-            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 768)
+            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 384)
             #features = features * attn_norms.unsqueeze(2)
             mean_feats=[]
             dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)

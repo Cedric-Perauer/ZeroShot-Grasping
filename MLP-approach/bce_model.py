@@ -5,20 +5,17 @@ from dinov2.models.vision_transformer import vit_small, vit_base
 
 class BCEGraspTransformer(nn.Module):
 
-    def __init__(self, img_size=224, input_dim=768, output_dim=32, int_dim=256):
+    def __init__(self, img_size=224, input_dim=384, output_dim=32, int_dim=128):
         super(BCEGraspTransformer, self).__init__()
         self.img_size = img_size
-        self.dinov2d_backbone = vit_base(
-            img_size=518,
+        self.dinov2d_backbone = vit_small(
             patch_size=14,
-            init_values=1.0e-05,
-            ffn_layer="mlp",
-            block_chunks=0,
-            qkv_bias=True,
-            proj_bias=True,
-            ffn_bias=True,
+            img_size=526,
+            init_values=1.0,
+            # ffn_layer="mlp",
+            block_chunks=0
         )
-        self.dinov2d_backbone.load_state_dict(torch.load('dinov2_vitb14_pretrain.pth'))
+        self.dinov2d_backbone.load_state_dict(torch.load('dinov2_vits14_pretrain.pth'))
         for param in self.dinov2d_backbone.parameters():
             param.requires_grad = False
         self.patch_size = 14
