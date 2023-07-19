@@ -30,7 +30,7 @@ def train(dataset, model, args_train, device):
     iter = 0.
     tot_iter = 0
     for epoch in range(args_train["num_epochs"]):
-        for i in range(args_train["num_images"]):
+        for i in range(len(dataset)):
             optim.zero_grad()
             data = dataset[i]
             mask = data["mask"].to(device)
@@ -42,7 +42,7 @@ def train(dataset, model, args_train, device):
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features, _ = model.forward_dino_features(img.unsqueeze(0))
-            features = features.squeeze().reshape(PATCH_DIM, PATCH_DIM, 384)
+            features = features.squeeze().reshape(PATCH_DIM, PATCH_DIM, 768)
             mean_feats=[]
             patch_area = 1
             for i in range(all_points.shape[0]):
@@ -82,14 +82,15 @@ def train(dataset, model, args_train, device):
                     'iter': tot_iter
                 }, tot_iter)
                 train_loss_running = 0.
-        if epoch % args_train['save_every'] == 0 : 
-            torch.save(model.state_dict(), f'runs/grasp_entry_point_{epoch}.ckpt')
+
+    torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
 
 
 def main(args_train):
     device = torch.device(args_train["device"]) if torch.cuda.is_available() else torch.device("cpu")
     image_transform = get_transform()
     model = BCEGraspTransformer(img_size=args_train['img_size'],int_dim=256,output_dim=128)
-    dataset = JacquardSamples(image_transform=image_transform, num_targets=5, overfit=False,
-                              img_size=args_train["img_size"])
+    dataset = JacquardSamples(dataset_root=args_train["split"], image_transform=image_transform, num_targets=5,
+                              overfit=False,
+                              img_size=args_train["img_size"], idx=args_train["num_objects"])
     train(dataset, model, args_train, device)
