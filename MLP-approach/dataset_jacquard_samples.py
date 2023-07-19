@@ -8,7 +8,7 @@ from PIL import Image
 import random
 from utils import get_grasp, get_augmented_angles, get_transform_mask
 
-jacquard_root  =os.getcwd()+ r'/data/Bottle/'
+jacquard_root  =os.getcwd()+ r'/data/categories_mlp_1training_sample/categories/'
 
 
 class JacquardSamples(Dataset):
@@ -16,21 +16,26 @@ class JacquardSamples(Dataset):
     very simple dataloader to test some stuff on Jacquard samples dataset
     '''
 
-    def __init__(self, dataset_root=jacquard_root,
+    def __init__(self, dataset_root="",
                  image_transform=None,
                  num_targets=2, crop=False, overfit=False, img_size=224,idx=0):
         self.img_size = img_size
-        self.dataset_root = dataset_root
+        self.dataset_root = jacquard_root + dataset_root
         self.image_transform = image_transform
         self.mask_transform = get_transform_mask()
-        self.classes = os.listdir(dataset_root)
+        self.classes = os.listdir(self.dataset_root)
         self.image_norm_mean = (0.485, 0.456, 0.406)
         self.image_norm_std = (0.229, 0.224, 0.225)
         self.crop = crop
         self.overfit = overfit
+        self.mask_paths = []
+        self.image_paths = []
+        self.grasp_txts = []
+        self.nums = []
         for num_c, cat in enumerate(self.classes):
             if os.path.isdir(self.dataset_root + cat) == False :
                 continue
+
             fs = os.listdir(self.dataset_root + cat)
 
             imgs = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.jpg') or i.endswith('.png')]
@@ -43,11 +48,14 @@ class JacquardSamples(Dataset):
             imgs = [self.dataset_root + cat + "/" + i for i in imgs]
             img_masks = [i.replace('RGB', 'mask') for i in imgs]
             grasp_txts = [self.dataset_root + cat + "/" + i for i in grasp_txts]
-            if num_c == idx : 
-                break 
-        self.mask_paths = img_masks
-        self.image_paths = imgs
-        self.grasp_txts = grasp_txts
+            self.mask_paths.extend(img_masks)
+            self.image_paths.extend(imgs)
+            self.grasp_txts.extend(grasp_txts)
+            self.nums.append([len(imgs)])
+        select_idx = np.sum(np.array(self.nums)[:idx])
+        self.mask_paths = np.array(self.mask_paths)[:select_idx]
+        self.image_paths = np.array(self.image_paths)[:select_idx]
+        self.grasp_txts = np.array(self.grasp_txts)[:select_idx]
         if (len(self.image_paths) == len(self.grasp_txts) == len(self.mask_paths)) == False:
             raise Exception("Number of images and grasp files do not match")
 

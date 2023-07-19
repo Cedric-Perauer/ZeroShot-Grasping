@@ -27,33 +27,26 @@ def train(dataset, model, args_train, device):
     iter = 0.
     tot_iter = 0
     for epoch in range(args_train["num_epochs"]):
-        for i in range(args_train["num_images"]):
+        for i in range(len(dataset)):
             optim.zero_grad()
             data = dataset[i]
             img = data["img"].to(device)
             img = torch.permute(img, (0, 2, 1))
             mask = data["mask"].sum().sqrt().to(device)
-            mask_standard = data["mask"].to(device)
             grasp = data["points_grasp"]//14
-            #false_points = create_correct_false_points_mask(grasp.to(device), args_train["batch_size"],mask_standard,img,VIS=False)
             grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
             grasp = torch.cat([grasp, grasp_inv], dim=0)
-            #false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask_standard,img,VIS=False)
             false_points = create_correct_false_points(grasp, args_train["batch_size"])
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
-            #attn = model.forward_dino_attentions(img.unsqueeze(0)).squeeze()[:,0,1:]
-            #attn_norms = torch.norm(attn, dim=0).reshape(args_train["img_size"]//14, args_train["img_size"]//14)
 
-            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 384)
+            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 768)
             #features = features * attn_norms.unsqueeze(2)
             mean_feats=[]
-            diffs = []
             dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
             #dif_gt_mean = dif[:args_train["batch_size"]].mean()
             dif_n = (dif/mask).unsqueeze(1)
-            #print(dif_n)
             for i in range(all_points.shape[0]):
                 imix = all_points[i,:,0].min()
                 imax = all_points[i,:,0].max()
@@ -108,6 +101,7 @@ def main(args_train):
     device = torch.device(args_train["device"])
     image_transform = get_transform()
     model = BCEGraspTransformer(img_size=args_train["img_size"])
-    dataset = JacquardSamples(image_transform=image_transform, num_targets=5, overfit=False,
-                              img_size=args_train["img_size"])
+    dataset = JacquardSamples(dataset_root= args_train["split"] ,image_transform=image_transform, num_targets=5, overfit=False,
+                              img_size=args_train["img_size"], idx=args_train["num_objects"])
+    print(len(dataset))
     train(dataset, model, args_train, device)
