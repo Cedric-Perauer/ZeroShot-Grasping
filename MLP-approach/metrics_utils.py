@@ -1,7 +1,7 @@
 
 import torch 
 from shapely.geometry import Polygon
-
+import math
 def create_oriented_bounding_box(point1, point2, h):
     direction_vector = point2 - point1
     direction_vector /= torch.norm(direction_vector.to(torch.float32))
@@ -53,14 +53,19 @@ def grasp_correct_full(pred_point, single_point, gt_grasp,heights,thresh_angle=3
         iou_flag = False
         
         ##1) angle verifier 
-        vec_pred_to_single = pred_point - single_point #vector of the prediction grasps 
-        vec_single_to_gt = gt_grasp[0] - gt_grasp[1] #vector of the ground truth grasps
-        vec_single_to_gt_rev = gt_grasp[1] - gt_grasp[0] #vector of the ground truth grasps
+        vec_pred_to_single = (pred_point - single_point).to(torch.float64) #vector of the prediction grasps
+        vec_single_to_gt = (gt_grasp[0] - gt_grasp[1]).to(torch.float64) #vector of the ground truth grasps
+        vec_single_to_gt_rev = (gt_grasp[1] - gt_grasp[0]).to(torch.float64) #vector of the ground truth grasps
 
-        
-        dot_product = torch.dot(vec_pred_to_single.to(torch.float64), vec_single_to_gt.to(torch.float64))
-        dot_product_rev = torch.dot(vec_pred_to_single.to(torch.float64), vec_single_to_gt_rev.to(torch.float64))
 
+        vec_pred_to_single = vec_pred_to_single/torch.norm(vec_pred_to_single)
+        vec_single_to_gt = vec_single_to_gt / torch.norm(vec_single_to_gt)
+        vec_single_to_gt_rev = vec_single_to_gt_rev / torch.norm(vec_single_to_gt_rev)
+
+
+
+        dot_product = torch.dot(vec_pred_to_single, vec_single_to_gt)
+        dot_product_rev = torch.dot(vec_pred_to_single, vec_single_to_gt_rev)
         # Calculate the magnitudes of the vectors
         magnitude_pred_to_single = torch.norm(vec_pred_to_single.to(torch.float64))
         magnitude_single_to_gt = torch.norm(vec_single_to_gt.to(torch.float64))
@@ -72,30 +77,34 @@ def grasp_correct_full(pred_point, single_point, gt_grasp,heights,thresh_angle=3
 
         # Calculate the angle in radians
         correct = False
-        angle_radians = torch.acos(cos_angle)
-        angle_radians_rev = torch.acos(cos_angle_rev)
+        angle_radians = torch.acos(dot_product)
+        angle_radians_rev = torch.acos(dot_product_rev)
 
         # Convert the angle to degrees
         angle_degrees = angle_radians * (180.0 / torch.pi)
         angle_degrees_rev = angle_radians_rev * (180.0 / torch.pi)
         #print("angle_degrees", angle_degrees)
         #print("angle_degrees_rev", angle_degrees_rev)
-        
-        if angle_degrees < thresh_angle or angle_degrees_rev < thresh_angle:        
+
+        angle_return = min(angle_degrees, angle_degrees_rev)
+        if angle_degrees < thresh_angle or angle_degrees_rev < thresh_angle:
                 angle_flag = True
         
-        
+        if math.isnan(angle_degrees) or math.isnan(angle_degrees_rev):
+                angle_flag = True
+                angle_return = torch.tensor(0, dtype=torch.float64)
+
         
         corner_points_gt = create_oriented_bounding_box(gt_grasp[0].to(torch.float32),gt_grasp[1].to(torch.float32),heights)
         corner_points_pred = create_oriented_bounding_box(single_point.to(torch.float32),pred_point.to(torch.float32),heights)
         
         iou = oriented_bounding_box_iou(corner_points_gt, corner_points_pred)
         
-        
+
         if iou >= thresh_iou:
                 iou_flag = True
         
         if angle_flag == True and iou_flag == True:
                 correct = True
-        return corner_points_gt, corner_points_pred, correct, iou, min(angle_degrees,angle_degrees_rev)
+        return corner_points_gt, corner_points_pred, correct, iou, angle_return
         

@@ -16,7 +16,7 @@ def get_features(dataset, model, device, args_infer, test_idx):
     grasp = torch.cat([grasp, grasp_inv], dim=0)
     features, clk = model.forward_dino_features(img.unsqueeze(0))
 
-    features = features.squeeze().reshape(args_infer["img_size"] // 14, args_infer["img_size"] // 14, 384)
+    features = features.squeeze().reshape(args_infer["img_size"] // 14, args_infer["img_size"] // 14, 768)
 
     return img, mask, grasp, features, height, corners
 
@@ -143,6 +143,8 @@ def get_predictions (num_grasps, data,constrain_mode = False):
             th_n = diff_n<min_dist
             th = th_p + th_n
             preds[th] = 0.
+
+
 
             topk=1
             if topk != 0:
@@ -350,16 +352,16 @@ def get_valid_points(all_points, features,model,device='cuda',PATCH_DIM=1120//14
     preds = torch.cat([preds.cpu().detach().unsqueeze(2), zeros, zeros], dim = 2)
     return preds, preds_patches
 
-def get_topk_valid_points(preds,preds_patches,topk_num=10,TOP_K=True,device='cuda'): 
+def get_topk_valid_points(preds,preds_patches, mask_i, topk_num=10,TOP_K=True,device='cuda'):
     pts = None
     if TOP_K : 
         preds_cp = preds_patches
-
+        mask_i = torch.nn.functional.interpolate(mask_i.unsqueeze(0), (80, 80), mode="bilinear").squeeze().flatten()
         k = topk_num
         flattened_tensor = preds_cp.flatten()
+        flattened_tensor[mask_i>0.2] = 0.
         # Find the top k values and their indices
         top_values, top_indices = torch.topk(flattened_tensor, k)
-
         # Create a mask tensor where the top k values are True and the rest are False
         mask = torch.zeros_like(flattened_tensor)
         mask[top_indices] = 1.
