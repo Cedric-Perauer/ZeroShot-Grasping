@@ -2,7 +2,7 @@ from train_jac_single import main
 
 
 args_train = {
-    "split" : r"Bottle_train/",
+    "split" : "Bottle_train/",
     "device": "cuda",
     "angle_mode": False,
     "img_size": 1120,

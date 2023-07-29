@@ -43,15 +43,20 @@ def train(dataset, model, args_train, device):
             div_bs = bs // 3
             remaining_bs = bs - div_bs * 2
             false_points = false_points[:remaining_bs]
-            left_grasps = left_grasps.reshape(-1, 2, 2)
-            right_grasps = right_grasps.reshape(-1, 2, 2)
+            try : 
+                left_grasps = left_grasps.reshape(-1, 2, 2)
+                right_grasps = right_grasps.reshape(-1, 2, 2)
+            except :
+                left_grasps = left_grasps[:left_grasps.shape[0]-1].reshape(-1, 2, 2)
+                right_grasps = right_grasps[:right_grasps.shape[0]-1].reshape(-1, 2, 2)
+
+            
             left_grasps = left_grasps[:div_bs]
             right_grasps = right_grasps[:div_bs]
             
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([left_grasps, right_grasps,false_points], dim=0).to(device)
             #all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
-            import pdb; pdb.set_trace()
             features, _ = model.forward_dino_features(img.unsqueeze(0))
             features = features.squeeze().reshape(PATCH_DIM, PATCH_DIM, 768)
             mean_feats=[]
@@ -59,11 +64,13 @@ def train(dataset, model, args_train, device):
             for i in range(all_points.shape[0]):
                 pt1 = all_points[i,0,:]
                 pt2 = all_points[i,1,:]
-                                
-                features_1 = features[pt1[0]:pt1[0]+patch_area, pt1[1]:pt1[1]+patch_area, :]
+                
+                x,y = int(pt1[0].item()), int(pt1[1].item())
+                features_1 = features[x:x+patch_area, y:y+patch_area, :]
                 features_1 = features_1.reshape(features_1.shape[0] * features_1.shape[1], features_1.shape[2]).mean(0)
                 
-                features_2 = features[pt2[0]:pt2[0]+patch_area, pt2[1]:pt2[1]+patch_area, :]
+                x,y = int(pt2[0].item()), int(pt2[1].item()) 
+                features_2 = features[x:x+patch_area, y:y+patch_area, :]
                 features_2 = features_2.reshape(features_2.shape[0] * features_2.shape[1], features_2.shape[2]).mean(0)
                 
                 
@@ -74,9 +81,12 @@ def train(dataset, model, args_train, device):
                     mean_feats = torch.cat([mean_feats, features_1.unsqueeze(0)], dim=0)
                     mean_feats = torch.cat([mean_feats, features_2.unsqueeze(0)], dim=0)
 
-            gt = torch.cat([torch.ones(2*args_train["batch_size"]), torch.zeros(2*args_train["batch_size"])]).to(device)
-            pred = model.forward_valid(mean_feats).squeeze()
-            loss = loss_bce(pred, gt)
+            #gt = torch.cat([torch.ones(2*args_train["batch_size"]), torch.zeros(2*args_train["batch_size"])]).to(device)
+            gt = torch.cat([torch.ones(div_bs * 2), torch.ones(div_bs * 2) * 2., torch.zeros(remaining_bs * 2)]).to(device).to(torch.int64)
+            
+            pred = model.forward_valid(mean_feats)
+            target_one_hot = torch.eye(3)[gt]
+            loss = loss_bce(pred, target_one_hot)
             loss.backward()
             optim.step()
 

@@ -36,7 +36,7 @@ class BCEGraspTransformer(nn.Module):
         self.linear_headvalid = nn.Sequential(
             nn.Linear(int_dim, output_dim),
             nn.ReLU(),
-            nn.Linear(output_dim, 1),
+            nn.Linear(output_dim, 3),
             nn.Sigmoid()
         )
     def forward_dino_features(self, img):
