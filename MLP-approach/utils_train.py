@@ -58,15 +58,31 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     
     ## vis the data 
     if VIS : 
-        grasp_vis = torch.zeros((PATCH_DIM, PATCH_DIM))
+        grasp_vis_left = torch.zeros((PATCH_DIM, PATCH_DIM))
+        grasp_vis_right = torch.zeros((PATCH_DIM, PATCH_DIM))
         for g in grasp:
                 g1, g2 = g[0], g[1]
-                grasp_vis[g1[0], g1[1]] = 1
-                grasp_vis[g2[0], g2[1]] = 1
-        grasp_vis = grasp_vis.unsqueeze(0).unsqueeze(0)
-        grasp_vis = torch.nn.functional.interpolate(grasp_vis, (PATCH_DIM, PATCH_DIM), mode="nearest").squeeze()
+                if g1[1] < g2[1]:
+                    grasp_vis_left[g1[0], g1[1]] = 1
+                    grasp_vis_right[g2[0], g2[1]] = 1
+                elif g1[1] > g2[1]:
+                    grasp_vis_left[g2[0], g2[1]] = 1
+                    grasp_vis_right[g1[0], g1[1]] = 1
+                else : 
+                    #check for y 
+                    if g1[0] >= g2[0]:
+                        grasp_vis_left[g1[0], g1[1]] = 1
+                        grasp_vis_right[g2[0], g2[1]] = 1
+                    else :
+                        grasp_vis_left[g2[0], g2[1]] = 1
+                        grasp_vis_right[g1[0], g1[1]] = 1
+                        
+        grasp_vis_left = grasp_vis_left.unsqueeze(0).unsqueeze(0)
+        grasp_vis_right = grasp_vis_right.unsqueeze(0).unsqueeze(0)
+        grasp_vis_left = torch.nn.functional.interpolate(grasp_vis_left, (PATCH_DIM, PATCH_DIM), mode="nearest").squeeze()
+        grasp_vis_right = torch.nn.functional.interpolate(grasp_vis_right, (PATCH_DIM, PATCH_DIM), mode="nearest").squeeze()
         zeros = torch.zeros(PATCH_DIM, PATCH_DIM, 1)
-        grasp_vis = torch.cat([zeros,grasp_vis.cpu().detach().unsqueeze(2), zeros], dim = 2)
+        grasp_vis = torch.cat([grasp_vis_right.cpu().detach().unsqueeze(2),grasp_vis_left.cpu().detach().unsqueeze(2), grasp_vis_right.cpu().detach().unsqueeze(2)], dim = 2)
 
         
         one_indices_vis = torch.nonzero(mask[0] == 1)  
@@ -105,7 +121,8 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
         
         #show_img = org_image + 0.7*preds.cpu().detach().numpy() 
         img =torch.permute(inv_transform(img), (1, 2, 0)).cpu().numpy()
-        show_img = 0.7 * img + 0.2 * grasp_vis.numpy() + 0.2 * mask_vis1.numpy() + 0.5 * false_points_vis.numpy() 
+        show_img = 0.7 * img + 0.3 * grasp_vis.numpy()
+        #show_img = 0.7 * img + 0.2 * grasp_vis.numpy() + 0.2 * mask_vis1.numpy() + 0.5 * false_points_vis.numpy() 
         show_img2 = 0.7 * img + 0.2 * grasp_vis.numpy() + 0.2 * mask_vis1.numpy() + 0.5 * false_objects_vis.numpy() 
         #show_img2 = mask_vis.numpy()
         #show_img = mask_vis1.numpy()
