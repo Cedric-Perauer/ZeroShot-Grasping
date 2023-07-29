@@ -35,6 +35,29 @@ def check_and_remove_tensors2(a, b):
 def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     inv_transform = get_inv_transform()
     mask = mask.permute(0,2,1).unsqueeze(0)
+    
+    
+    #get left and right grasp points for 1 point method 
+    grasps_left = torch.empty((grasp.shape[0],2))
+    grasps_right = torch.empty((grasp.shape[0],2))  
+    for i,g in enumerate(grasp):
+                g1, g2 = g[0], g[1]
+                if g1[1] < g2[1]:
+                    grasps_left[i] = g1
+                    grasps_right[i] = g2
+                elif g1[1] > g2[1]:
+                    grasps_left[i] = g2
+                    grasps_right[i] = g1
+                else : 
+                    #check for y 
+                    if g1[0] >= g2[0]:
+                        grasps_left[i] = g1
+                        grasps_right[i] = g2
+                    else :
+                        grasps_left[i] = g2
+                        grasps_right[i] = g1
+    
+    
     if img is not None : 
         img = torch.nn.functional.interpolate(img.unsqueeze(0), (PATCH_DIM, PATCH_DIM), mode="bilinear")[0]
     mask = torch.nn.functional.interpolate(mask, (PATCH_DIM, PATCH_DIM), mode="nearest")[0]
@@ -60,22 +83,12 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     if VIS : 
         grasp_vis_left = torch.zeros((PATCH_DIM, PATCH_DIM))
         grasp_vis_right = torch.zeros((PATCH_DIM, PATCH_DIM))
-        for g in grasp:
-                g1, g2 = g[0], g[1]
-                if g1[1] < g2[1]:
-                    grasp_vis_left[g1[0], g1[1]] = 1
-                    grasp_vis_right[g2[0], g2[1]] = 1
-                elif g1[1] > g2[1]:
-                    grasp_vis_left[g2[0], g2[1]] = 1
-                    grasp_vis_right[g1[0], g1[1]] = 1
-                else : 
-                    #check for y 
-                    if g1[0] >= g2[0]:
-                        grasp_vis_left[g1[0], g1[1]] = 1
-                        grasp_vis_right[g2[0], g2[1]] = 1
-                    else :
-                        grasp_vis_left[g2[0], g2[1]] = 1
-                        grasp_vis_right[g1[0], g1[1]] = 1
+        for g in grasps_left :
+            grasp_vis_left[int(g[0]),int(g[1])] = 1
+        
+        for g in grasps_right :
+            grasp_vis_right[int(g[0]),int(g[1])] = 1
+        
                         
         grasp_vis_left = grasp_vis_left.unsqueeze(0).unsqueeze(0)
         grasp_vis_right = grasp_vis_right.unsqueeze(0).unsqueeze(0)
@@ -135,18 +148,18 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
         plt.show()
     
     
-    return torch.cat([false_points_object,false_points_grasp],dim=0)
+    return torch.cat([false_points_object,false_points_grasp],dim=0), grasps_left, grasps_right
             
 
     
 def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
-    false_points_mask = create_false_points_mask(grasp,mask,bs,img,VIS)
+    false_points_mask, grasps_left, grasps_right = create_false_points_mask(grasp,mask,bs,img,VIS)
     try : 
         false_points_mask = false_points_mask.reshape(-1,2,2)
     except : 
         import pdb; pdb.set_trace()
     
-    return false_points_mask
+    return false_points_mask, grasps_left, grasps_right
     
 
 def create_correct_false_points(grasp, bs):

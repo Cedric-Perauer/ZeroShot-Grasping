@@ -38,9 +38,20 @@ def train(dataset, model, args_train, device):
             img = torch.permute(img, (0, 2, 1))
             grasp = data["points_grasp"]//14
             grasp = grasp.to(device)
-            false_points = create_correct_false_points_mask(grasp, args_train["batch_size"],mask,img,VIS=False)
+            false_points, left_grasps, right_grasps = create_correct_false_points_mask(grasp, args_train["batch_size"],mask,img,VIS=False)
+            bs = args_train['batch_size'] *2  #batch size
+            div_bs = bs // 3
+            remaining_bs = bs - div_bs * 2
+            false_points = false_points[:remaining_bs]
+            left_grasps = left_grasps.reshape(-1, 2, 2)
+            right_grasps = right_grasps.reshape(-1, 2, 2)
+            left_grasps = left_grasps[:div_bs]
+            right_grasps = right_grasps[:div_bs]
+            
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
+            all_points = torch.cat([left_grasps, right_grasps,false_points], dim=0).to(device)
+            #all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
+            import pdb; pdb.set_trace()
             features, _ = model.forward_dino_features(img.unsqueeze(0))
             features = features.squeeze().reshape(PATCH_DIM, PATCH_DIM, 768)
             mean_feats=[]
