@@ -3,7 +3,7 @@ import numpy as np
 from dataset_jacquard_samples import JacquardSamples
 from utils import get_transform, augment_image
 from bce_model import BCEGraspTransformer
-from utils_train import create_correct_false_points, create_correct_false_points_mask
+from utils_train import create_correct_false_points, create_correct_false_grasps_mask
 import random
 from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -31,17 +31,20 @@ def train(dataset, model, args_train, device):
             optim.zero_grad()
             data = dataset[i]
             img = data["img"].to(device)
+            height = data['height']
             img = torch.permute(img, (0, 2, 1))
             mask = data["mask"].sum().sqrt().to(device)
+            obj_mask = data['mask'].to(device)  
             grasp = data["points_grasp"]//14
             grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
             grasp = torch.cat([grasp, grasp_inv], dim=0)
-            false_points = create_correct_false_points(grasp, args_train["batch_size"])
+            false_points = create_correct_false_grasps_mask(grasp, args_train["batch_size"],obj_mask,height,img,VIS=True)
+            #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
 
-            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 384)
+            features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 768)
             #features = features * attn_norms.unsqueeze(2)
             mean_feats=[]
             dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
@@ -104,4 +107,5 @@ def main(args_train):
     dataset = JacquardSamples(dataset_root= args_train["split"] ,image_transform=image_transform, num_targets=5, overfit=False,
                               img_size=args_train["img_size"], idx=args_train["num_objects"])
     print(len(dataset))
+    device = args_train["device"] if torch.cuda.is_available() else "cpu"
     train(dataset, model, args_train, device)
