@@ -252,7 +252,18 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         if correct_flag == False :
             ##add to false grasps 
             false_grasps.append(wrong_grasp)
-    import pdb; pdb.set_trace()
+    
+    false_grasps_tensor = torch.zeros((len(false_grasps), 2, 2))
+    for idx,wrong_grasp in enumerate(false_grasps) :
+        false_grasps_tensor[idx] = wrong_grasp 
+    
+    ##concatenate points together with total size of batch size
+    bs_6 = int(bs / 6) 
+    wrong_far_grasps = torch.cat((wrong_far_grasps_right[:bs_6],wrong_far_grasps_left[:bs_6]), dim=0)
+    wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:bs_6],wrong_mask_grasps_left[:bs_6]), dim=0)
+    remaining = bs - (bs_6 * 4) #size of false grasps tensor to combine correct shape 
+    false_grasps_tensor = false_grasps_tensor[:remaining]
+    false_grasps_total = torch.cat([wrong_far_grasps, wrong_mask_grasps, false_grasps_tensor], dim=0)
     
     ## vis the data 
     if VIS : 
@@ -323,7 +334,7 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         plt.show()
     
     
-    return torch.cat([false_points_object,false_points_grasp],dim=0), grasps_left, grasps_right
+    return false_grasps_total, grasps_left, grasps_right
 
     
 def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
@@ -336,7 +347,7 @@ def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
     return false_points_mask, grasps_left, grasps_right
     
 def create_correct_false_grasps_mask(grasp, bs,mask,height,img=None,VIS=False):
-    false_points_mask = create_false_grasps_mask(grasp,mask,bs,height,img,VIS)
+    false_points_mask, _, _  = create_false_grasps_mask(grasp,mask,bs,height,img,VIS)
 
     
     return false_points_mask

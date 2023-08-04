@@ -98,7 +98,10 @@ def grasp_correct_full(pred_point, single_point, gt_grasp,heights,thresh_angle=3
         corner_points_gt = create_oriented_bounding_box(gt_grasp[0].to(torch.float32),gt_grasp[1].to(torch.float32),heights)
         corner_points_pred = create_oriented_bounding_box(single_point.to(torch.float32),pred_point.to(torch.float32),heights)
         
-        iou = oriented_bounding_box_iou(corner_points_gt, corner_points_pred)
+        try : 
+                iou = oriented_bounding_box_iou(corner_points_gt, corner_points_pred)
+        except :
+                iou = 0 
         
 
         if iou >= thresh_iou:

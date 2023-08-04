@@ -38,10 +38,10 @@ def train(dataset, model, args_train, device):
             grasp = data["points_grasp"]//14
             grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
             grasp = torch.cat([grasp, grasp_inv], dim=0)
-            false_points = create_correct_false_grasps_mask(grasp, args_train["batch_size"],obj_mask,height,img,VIS=True)
+            false_points = create_correct_false_grasps_mask(grasp, args_train["batch_size"],obj_mask,height,img,VIS=False)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
-            idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
+            #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
+            all_points = torch.cat([grasp[:args_train['batch_size']], false_points], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
 
             features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 768)
@@ -51,11 +51,14 @@ def train(dataset, model, args_train, device):
             #dif_gt_mean = dif[:args_train["batch_size"]].mean()
             dif_n = (dif/mask).unsqueeze(1)
             for i in range(all_points.shape[0]):
-                imix = all_points[i,:,0].min()
-                imax = all_points[i,:,0].max()
-                ymix = all_points[i,:,1].min()
-                ymax = all_points[i,:,1].max()
-                features_i = features[imix:imax+1, ymix:ymax+1, :]
+                imix = int(all_points[i,:,0].min().item())
+                ymix = int(all_points[i,:,1].min().item())
+                imax = int(all_points[i,:,0].max().item())
+                ymax = int(all_points[i,:,1].max().item())
+                try : 
+                    features_i = features[imix:imax+1, ymix:ymax+1, :]
+                except : 
+                    breakpoint()
                 #attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
                 features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)
                 #features_i = torch.cat([features_i, clk.squeeze()], dim=0)
