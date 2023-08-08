@@ -41,7 +41,7 @@ def train(dataset, model, args_train, device):
             false_points = create_correct_false_grasps_mask(grasp, args_train["batch_size"],obj_mask,height,img,VIS=False)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            all_points = torch.cat([grasp[:args_train['batch_size']], false_points], dim=0).to(device)
+            all_points = torch.cat([grasp[:args_train['batch_size']].to(device), false_points.to(device)], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
 
             features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 768)

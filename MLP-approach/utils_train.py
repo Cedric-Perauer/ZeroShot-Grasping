@@ -154,13 +154,15 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
             
 
 def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=1120):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     inv_transform = get_inv_transform()
     mask = mask.permute(0,2,1).unsqueeze(0)
+    grasp = grasp.to(device)
     
     
     #get left and right grasp points for 1 point method 
-    grasps_left = torch.empty((grasp.shape[0],2))
-    grasps_right = torch.empty((grasp.shape[0],2))  
+    grasps_left = torch.empty((grasp.shape[0],2)).to(device)
+    grasps_right = torch.empty((grasp.shape[0],2)).to(device)  
     for i,g in enumerate(grasp):
                 g1, g2 = g[0], g[1]
                 if g1[1] < g2[1]:
@@ -183,8 +185,8 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         img = torch.nn.functional.interpolate(img.unsqueeze(0), (PATCH_DIM, PATCH_DIM), mode="bilinear")[0]
     mask = torch.nn.functional.interpolate(mask, (PATCH_DIM, PATCH_DIM), mode="nearest")[0]
     zero_indices = torch.nonzero(mask[0] != 1) 
-    one_indices = torch.nonzero(mask[0] == 1)  
-    reshaped_grasps = grasp.reshape(-1,2)
+    one_indices = torch.nonzero(mask[0] == 1).to(device)  
+    reshaped_grasps = grasp.reshape(-1,2).to(device)
 
     #start = time.time()
     false_points_object = check_and_remove_tensors2(reshaped_grasps, one_indices) ##make sure that no gt grasps are contained due to feature overlap
@@ -221,8 +223,8 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     wrong_far_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
 
     #combine left and right points in different ways to form incorrect grasp pairs, use metrics to check for true incorrect grasp pairs
-    wrong_left_right_grasp = torch.cat((grasps_left.unsqueeze(2), grasps_right.unsqueeze(2)), dim=2)
-    wrong_right_left_grasp = torch.cat((grasps_right.unsqueeze(2), grasps_left.unsqueeze(2)), dim=2)
+    wrong_left_right_grasp = torch.cat((grasps_left.unsqueeze(2), grasps_right.unsqueeze(2)), dim=2).to(device)
+    wrong_right_left_grasp = torch.cat((grasps_right.unsqueeze(2), grasps_left.unsqueeze(2)), dim=2).to(device)
     
     #go through each pair and check if they are invalid grasps, otherwise we need to discard them 
     height_average = sum(height)/len(height) * 2
@@ -230,6 +232,8 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     for wrong_grasp in wrong_left_right_grasp :
         correct_flag = False
         for gt in grasp :
+            gt = gt.to('cpu')  
+            wrong_grasp = wrong_grasp.to('cpu')    
             corner_points, corner_points_pred, correct, iou, angle_diff = grasp_correct_full(wrong_grasp[0] * 1120/80. + 7, wrong_grasp[1] * 1120/80. + 7, 
                                                                     gt * 1120/80. + 7,height_average /2. * img_size ) 
             if correct :
@@ -243,6 +247,8 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     for wrong_grasp in wrong_right_left_grasp :
         correct_flag = False
         for gt in grasp :
+            wrong_grasp = wrong_grasp.to('cpu')
+            gt = gt.to('cpu')
             corner_points, corner_points_pred, correct, iou, angle_diff = grasp_correct_full(wrong_grasp[0] * 1120/80. + 7, wrong_grasp[1] * 1120/80. + 7, 
                                                                     gt * 1120/80. + 7,height_average /2. * img_size ) 
             if correct :
@@ -263,7 +269,7 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:bs_6],wrong_mask_grasps_left[:bs_6]), dim=0)
     remaining = bs - (bs_6 * 4) #size of false grasps tensor to combine correct shape 
     false_grasps_tensor = false_grasps_tensor[:remaining]
-    false_grasps_total = torch.cat([wrong_far_grasps, wrong_mask_grasps, false_grasps_tensor], dim=0)
+    false_grasps_total = torch.cat([wrong_far_grasps.to(device), wrong_mask_grasps.to(device), false_grasps_tensor.to(device)], dim=0)
     
     ## vis the data 
     if VIS : 

@@ -55,7 +55,7 @@ def train(dataset, model, args_train, device):
             right_grasps = right_grasps[:div_bs]
             
             idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            all_points = torch.cat([left_grasps, right_grasps,false_points], dim=0).to(device)
+            all_points = torch.cat([left_grasps.to(device), right_grasps.to(device),false_points.to(device)], dim=0).to(device)
             #all_points = torch.cat([grasp[idx], false_points], dim=0).to(device)
             features, _ = model.forward_dino_features(img.unsqueeze(0))
             features = features.squeeze().reshape(PATCH_DIM, PATCH_DIM, 768)
@@ -85,7 +85,7 @@ def train(dataset, model, args_train, device):
             gt = torch.cat([torch.ones(div_bs * 2), torch.ones(div_bs * 2) * 2., torch.zeros(remaining_bs * 2)]).to(device).to(torch.int64)
             
             pred = model.forward_valid(mean_feats)
-            target_one_hot = torch.eye(3)[gt]
+            target_one_hot = torch.eye(3).to(device)[gt]
             loss = loss_bce(pred, target_one_hot)
             loss.backward()
             optim.step()
