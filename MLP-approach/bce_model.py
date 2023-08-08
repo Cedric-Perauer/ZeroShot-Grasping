@@ -5,7 +5,7 @@ from dinov2.models.vision_transformer import vit_small, vit_base
 
 class BCEGraspTransformer(nn.Module):
 
-    def __init__(self, img_size=224, input_dim=768, output_dim=32, int_dim=256):
+    def __init__(self, img_size=224, input_dim=768, output_dim=32, int_dim=256,input_cls=3):
         super(BCEGraspTransformer, self).__init__()
         self.img_size = img_size
         self.dinov2d_backbone = vit_base(
@@ -36,7 +36,7 @@ class BCEGraspTransformer(nn.Module):
         self.linear_headvalid = nn.Sequential(
             nn.Linear(int_dim, output_dim),
             nn.ReLU(),
-            nn.Linear(output_dim, 3),
+            nn.Linear(output_dim, input_cls),
             nn.Sigmoid()
         )
     def forward_dino_features(self, img):
