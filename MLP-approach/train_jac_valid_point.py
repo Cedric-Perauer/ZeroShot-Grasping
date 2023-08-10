@@ -110,7 +110,7 @@ def train(dataset, model, args_train, device):
 def main(args_train):
     device = torch.device(args_train["device"]) if torch.cuda.is_available() else torch.device("cpu")
     image_transform = get_transform()
-    model = BCEGraspTransformer(img_size=args_train['img_size'],int_dim=256,output_dim=128)
+    model = BCEGraspTransformer(img_size=args_train['img_size'],int_dim=256,output_dim=128,input_cls=3)
     dataset = JacquardSamples(dataset_root=args_train["split"], image_transform=image_transform, num_targets=5,
                               overfit=False,
                               img_size=args_train["img_size"], idx=args_train["num_objects"])
