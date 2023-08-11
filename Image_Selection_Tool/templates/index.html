@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .selected { border: 5px solid #FF6666; }
+        img { 
+             border: 5px solid white;
+             width: 100px;
+             height: 65px;
+             object-fit: contain;
+            }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+        }
+        .pagination a {
+            margin: 0 10px;
+            text-decoration: none;
+            color: #007BFF;
+            font-size: 18px;
+            border: 2px solid transparent;
+            padding: 2px;
+            border-radius: 5px;
+        }
+        .pagination a.marked {
+            background-color: #FFCCCC;
+        }
+        .pagination a.current {
+            border-color: #0000FF;
+        }
+        .pagination a:hover {
+            color: #0056b3;
+        }
+        .pagination span {
+            margin: 0 10px;
+        }
+        hr {
+            margin: 10px 0;
+        }
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+
+<body>
+<div class="pagination">
+    {% for i in range(1, total_pages + 1) %}
+        <a href="?page={{ i }}" class="{{ 'marked' if i in marked_pages else '' }} {{ 'current' if i == page else '' }}">{{ i }}</a>
+
+    {% endfor %}
+</div>
+<hr>
+
+    {% for image in images %}
+        <img src="{{ url_for('serve_image', filename=image) }}" class="{{ 'selected' if image in selected_images else '' }}" onclick="toggleSelect(this)">
+
+    {% endfor %}
+
+    <script>
+        var selectedImages = [];
+
+        function toggleSelect(imgElement) {
+            var imgSrc = imgElement.src;
+            if (imgElement.classList.contains('selected')) {
+                imgElement.classList.remove('selected');
+                var index = selectedImages.indexOf(imgSrc);
+                if (index > -1) {
+                    selectedImages.splice(index, 1);
+                }
+            } else {
+                imgElement.classList.add('selected');
+                selectedImages.push(imgSrc);
+            }
+            $.ajax({
+                url: '/save',
+                type: 'post',
+                contentType: 'application/json',
+                data: JSON.stringify(selectedImages),
+                success: function() {
+                    console.log('Saved');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
