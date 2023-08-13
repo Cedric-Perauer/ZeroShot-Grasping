@@ -466,11 +466,11 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
             origin_point = torch.permute(origin_point,(1, 2, 0)).cpu().detach().numpy() + 0.2*preds_cp.cpu().detach().numpy()
             show_img = org_image + 0.7*preds.cpu().detach().numpy() + 0.7*origin_point
             #show_img = org_image + 0.7*origin_point2 + 0.7*origin_point
-            plt.imshow(show_img)
-            plt.title("iou : {} | angle offset : {} degrees |  correct : {} | grasp conf : {}".format(round(best_iou,2),round(best_angle_diff.item(),2)  , correct_end, round(conf,2)))
-            plt.savefig('store_dir/{}.png'.format(i))
-
-    print("Accuracy is {} %".format(round(correct_cnt / total_cnt * 100,2)))
+            #plt.imshow(show_img)
+            #plt.title("iou : {} | angle offset : {} degrees |  correct : {} | grasp conf : {}".format(round(best_iou,2),round(best_angle_diff.item(),2)  , correct_end, round(conf,2)))
+            #plt.savefig('store_dir/{}.png'.format(i))
+            #plt.close()
+    #print("Accuracy is {} %".format(round(correct_cnt / total_cnt * 100,2)))
     return correct_cnt / total_cnt * 100
 
 

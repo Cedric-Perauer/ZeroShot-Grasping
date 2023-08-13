@@ -24,6 +24,7 @@ class JacquardSamples(Dataset):
         self.image_transform = image_transform
         self.mask_transform = get_transform_mask()
         self.classes = os.listdir(self.dataset_root)
+        print('classes', self.classes)
         self.image_norm_mean = (0.485, 0.456, 0.406)
         self.image_norm_std = (0.229, 0.224, 0.225)
         self.crop = crop
@@ -39,23 +40,28 @@ class JacquardSamples(Dataset):
             fs = os.listdir(self.dataset_root + cat)
 
             imgs = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.jpg') or i.endswith('.png')]
-            grasp_txts = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.txt')]
-            grasp_txts = [i.split('/')[-1] for i in grasp_txts]
+            #grasp_txts = [self.dataset_root + cat + "/" + i for i in fs if i.endswith('.txt')]
+            #grasp_txts = [i.split('/')[-1] for i in grasp_txts]
             imgs = [i.split('/')[-1] for i in imgs if 'RGB' in i]
 
             imgs = sorted(imgs, key=lambda x: int(x.split('_')[0]))
-            grasp_txts = sorted(grasp_txts, key=lambda x: int(x.split('_')[0]))
+            #grasp_txts = sorted(grasp_txts, key=lambda x: int(x.split('_')[0]))
             imgs = [self.dataset_root + cat + "/" + i for i in imgs]
             img_masks = [i.replace('RGB', 'mask') for i in imgs]
-            grasp_txts = [self.dataset_root + cat + "/" + i for i in grasp_txts]
+            grasp_txts = [i.replace('RGB', 'grasps').replace('.png','.txt') for i in imgs]
+            if len(grasp_txts) != len(imgs) :
+                raise Exception("Number of images and grasp files do not match at object", cat)
             self.mask_paths.extend(img_masks)
             self.image_paths.extend(imgs)
             self.grasp_txts.extend(grasp_txts)
             self.nums.append([len(imgs)])
-        select_idx = np.sum(np.array(self.nums)[:idx])
-        self.mask_paths = np.array(self.mask_paths)[:select_idx]
-        self.image_paths = np.array(self.image_paths)[:select_idx]
-        self.grasp_txts = np.array(self.grasp_txts)[:select_idx]
+        
+        #select_idx = np.sum(np.array(self.nums)[:idx])
+        select_idx = len(self.image_paths)
+        #print('select_idx', select_idx)
+        #self.mask_paths = np.array(self.mask_paths)[:select_idx]
+        #self.image_paths = np.array(self.image_paths)[:select_idx]
+        #self.grasp_txts = np.array(self.grasp_txts)[:select_idx]
         if (len(self.image_paths) == len(self.grasp_txts) == len(self.mask_paths)) == False:
             raise Exception("Number of images and grasp files do not match")
 

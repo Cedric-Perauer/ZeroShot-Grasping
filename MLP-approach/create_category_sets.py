@@ -69,7 +69,7 @@ for obj in data_dict:
                                                 for f in fs : 
                                                         if f.endswith('.png'):
                                                                 existing_nums.append(int(f.split('_')[0]))      
-                                                #import pdb; pdb.set_trace()     
+                                                #import pdb; pdb.set_trace()    
                                                 shutil.copytree(cur_full_name, new_dir_name)
                                                 fs = os.listdir(new_dir_name)
                                                 for f in fs : 
