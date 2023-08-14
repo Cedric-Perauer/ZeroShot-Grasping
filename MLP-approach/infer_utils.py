@@ -423,6 +423,7 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
                         best_corner_preds = corner_points_pred.clone()
                         best_iou = iou
                         best_angle_diff = angle_diff
+                        return 100
                         
                     
                     if correct_end == True :
@@ -469,7 +470,7 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
             #plt.imshow(show_img)
             #plt.title("iou : {} | angle offset : {} degrees |  correct : {} | grasp conf : {}".format(round(best_iou,2),round(best_angle_diff.item(),2)  , correct_end, round(conf,2)))
             #plt.savefig('store_dir/{}.png'.format(i))
-            #plt.close()
+            plt.close()
     #print("Accuracy is {} %".format(round(correct_cnt / total_cnt * 100,2)))
     return correct_cnt / total_cnt * 100
 
@@ -567,6 +568,7 @@ def get_valid_points(all_points, features,model,device='cuda',PATCH_DIM=1120//14
     mean_feats=[]
     diffs = []
     patch_area = 1
+    '''
     for i in range(all_points.shape[0]):
         pt1 = all_points[i,0,:]
                         
@@ -578,6 +580,22 @@ def get_valid_points(all_points, features,model,device='cuda',PATCH_DIM=1120//14
             mean_feats = features_1.unsqueeze(0)
         else:
             mean_feats = torch.cat([mean_feats, features_1.unsqueeze(0)], dim=0)
+    
+    '''    
+    #mean_feats2 = torch.zeros((6400,768)).to(device)
+    #features = features.repeat()
+    #pt1 = all_points[:,0,:]
+    pt1 = all_points[:, 0, :]
+    row_indices = pt1[:, 0]
+    col_indices = pt1[:, 1]
+
+    patch_indices = torch.arange(patch_area).to(device)
+    row_indices = row_indices[:, None] + patch_indices
+    col_indices = col_indices[:, None] + patch_indices
+
+    features_1 = features[row_indices, col_indices].reshape(-1, patch_area, 768)
+    mean_feats = features_1.mean(1)
+    
     with torch.no_grad():
         preds = model.forward_valid(mean_feats.to(device))
 
@@ -752,6 +770,7 @@ def visualize_valid_points(grasp,mask,org_image,preds_cp,IMAGE_SIZE=1120):
 def get_second_point_data(dataset,data_len,model_single,device,args_infer,inv_transform,test_idx=0): 
     max_dist =0
     min_dist = 999999
+    
     for i in range(data_len):
         data = dataset[i]
         mask = data["mask"].sum().sqrt()
