@@ -2,10 +2,10 @@ import torch
 import numpy as np 
 import matplotlib.pyplot as plt
 from utils import *
+import time
 from metrics_utils import *
 
-def get_features(dataset, model, device, args_infer, test_idx):
-    data = dataset[test_idx]
+def get_features(data, model, device, args_infer):
     img = data["img"].to(device)
     img = torch.permute(img, (0, 2, 1))
     grasp = data["points_grasp"] // 14
@@ -14,11 +14,11 @@ def get_features(dataset, model, device, args_infer, test_idx):
     corners = data['corners']
     grasp_inv = torch.cat([grasp[:, 1, :].unsqueeze(1), grasp[:, 0, :].unsqueeze(1)], dim=1)
     grasp = torch.cat([grasp, grasp_inv], dim=0)
-    features, clk = model.forward_dino_features(img.unsqueeze(0))
+    #features, clk = model.forward_dino_features(img.unsqueeze(0))
 
-    features = features.squeeze().reshape(args_infer["img_size"] // 14, args_infer["img_size"] // 14, 768)
+    #features = features.squeeze().reshape(args_infer["img_size"] // 14, args_infer["img_size"] // 14, 768)
 
-    return img, mask, grasp, features, height, corners
+    return img, mask, grasp, height, corners
 
 def test_single_point(grasp, mask, device, features, model, args_infer, point_idx,heights,single_point=None):
     if single_point is not None : 
@@ -768,24 +768,10 @@ def visualize_valid_points(grasp,mask,org_image,preds_cp,IMAGE_SIZE=1120):
     plt.imshow(show_img)
     
 def get_second_point_data(dataset,data_len,model_single,device,args_infer,inv_transform,test_idx=0): 
-    max_dist =0
-    min_dist = 999999
-    
-    for i in range(data_len):
-        data = dataset[i]
-        mask = data["mask"].sum().sqrt()
-        all_points = data["points_grasp"]//14
-        dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
-        dif_n = (dif/mask).unsqueeze(1)
-        if max_dist < dif_n.max():
-            max_dist = dif_n.max()
-        if min_dist > dif_n.min():
-            min_dist = dif_n.min()
-    
-    img, mask, grasp, features,heights,corners = get_features(dataset, model_single, device, args_infer, test_idx)
+    img, mask, grasp,heights,corners = get_features(dataset[test_idx], model_single, device, args_infer)
     org_image = torch.permute(inv_transform(img), (1, 2, 0)).cpu().numpy()
     mask_n = mask.sum().sqrt()
     mask = torch.nn.functional.interpolate(mask.unsqueeze(0), (args_infer["img_size"]//14, args_infer["img_size"]//14), mode="nearest").squeeze()
     mask = mask.reshape((args_infer["img_size"]//14)**2)
     mask = mask>0
-    return mask, mask_n, min_dist, max_dist, grasp, heights, corners
+    return mask, mask_n,  grasp, heights, corners
