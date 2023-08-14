@@ -108,18 +108,28 @@ def test_single_point_constraint(grasp, mask, device, features, model, args_infe
     mean_feats = []
     dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
     dif_n = (dif / mask).unsqueeze(1)
+    
+    imins = []
+    imaxs = []
+    start = time.time()
     for i in range(all_points.shape[0]):
         imix = int(all_points[i, :, 0].min().cpu())
         imax = int(all_points[i, :, 0].max().cpu())
         ymix = int(all_points[i, :, 1].min().cpu())
         ymax = int(all_points[i, :, 1].max().cpu())
         features_i = features[imix:imax + 1, ymix:ymax + 1, :]
+        imins.append(imix)
+        imaxs.append(imax)
         # attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
         features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)
         if i == 0:
             mean_feats = features_i.unsqueeze(0)
         else:
             mean_feats = torch.cat([mean_feats, features_i.unsqueeze(0)], dim=0)
+    end = time.time() - start
+    
+
+
     with torch.no_grad():
         preds = model(mean_feats.to(device), dif_n.to(device))
     return preds.squeeze(), dif_n.squeeze(), single_point, None
@@ -163,16 +173,17 @@ def test_single_point_constraint_left_right(grasp_left,grasp_right, mask, device
 
 def get_predictions (num_grasps, data,constrain_mode = False):
     items = []
+    valid_pts_pred, mask_n, device, features = data['valid_pts_pred'], data['mask_n'], data['device'], data['features']
+    model_single, args_infer = data['model_single'], data['args_infer']
+    heights = data['heights']
+    max_dist, min_dist = data['max_dist'], data['min_dist']
+    mask = data['mask']
     for point_idx in range(num_grasps):
-        valid_pts_pred, mask_n, device, features = data['valid_pts_pred'], data['mask_n'], data['device'], data['features']
-        model_single, args_infer = data['model_single'], data['args_infer']
-        heights = data['heights']
-        max_dist, min_dist = data['max_dist'], data['min_dist']
-        mask = data['mask']
-        
         if constrain_mode == True : 
+            start = time.time()
             preds, diff_n, single_point, single_point_gt = test_single_point_constraint(valid_pts_pred.cpu(), mask_n, device, features, model_single, args_infer, point_idx,constrain_mode=constrain_mode)
-        
+            end = time.time() - start
+            #print("single poiint time : ", end * 1000)
 
             th_p = diff_n>max_dist
             th_n = diff_n<min_dist
@@ -286,7 +297,6 @@ def get_predictions_left_right(num_grasps, data,constrain_mode = False):
         if constrain_mode == True : 
             preds, diff_n, single_point, single_point_gt = test_single_point_constraint_left_right(valid_pts_pred_left.cpu(), valid_pts_pred_right.cpu(),mask_n, device, features, model_single, args_infer, point_idx,constrain_mode=constrain_mode)
         
-
             th_p = diff_n>max_dist
             th_n = diff_n<min_dist
             th = th_p + th_n
