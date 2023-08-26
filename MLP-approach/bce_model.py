@@ -39,6 +39,20 @@ class BCEGraspTransformer(nn.Module):
             nn.Linear(output_dim, input_cls),
             nn.Sigmoid()
         )
+        
+        self.conv_head = nn.Sequential(
+            nn.Conv2d(in_channels=768, out_channels=256, kernel_size=3, stride=1, padding=0, bias=True),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1, stride=1, padding=0, bias=True),
+        )
+        
+        self.conv_linear_head = nn.Sequential(
+            nn.Linear(256+1, 64),
+            nn.ReLU(),
+            nn.Linear(64, input_cls),
+            nn.Sigmoid()
+        )
+        
     def forward_dino_features(self, img):
         ret_list = self.dinov2d_backbone.forward_features(img)
 
@@ -51,6 +65,20 @@ class BCEGraspTransformer(nn.Module):
     def forward(self, feats, diffs):
         f_reduce = self.linear_head(feats)
         return self.linear_head2(torch.cat([f_reduce, diffs], dim=1))
+    
+    def forward_conv(self, feats):
+        '''
+        get conv forward features around a small feature patch 
+        '''
+        return self.conv_head(feats)
+    
+    def forward_both_convs(self,feats_fused,diffs):
+        '''
+        forward the stacked conv features through a FNN to get grasp output 
+        '''
+        return self.conv_linear_head(torch.cat([feats_fused, diffs], dim=1))
+        
+   
     
     def forward_valid(self, feats):
         f_reduce = self.linear_head(feats)
