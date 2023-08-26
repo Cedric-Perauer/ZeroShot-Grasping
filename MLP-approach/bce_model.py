@@ -49,7 +49,7 @@ class BCEGraspTransformer(nn.Module):
         self.conv_linear_head = nn.Sequential(
             nn.Linear(256+1, 64),
             nn.ReLU(),
-            nn.Linear(64, input_cls),
+            nn.Linear(64, 1),
             nn.Sigmoid()
         )
         

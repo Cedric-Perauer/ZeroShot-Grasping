@@ -85,7 +85,6 @@ def train(dataset, model, args_train, device):
             gt = torch.cat([torch.ones(args_train["batch_size"]), torch.zeros(args_train["batch_size"])]).to(device)
             pred = model.forward_both_convs(stacked, dif_n).squeeze() 
             #pred = model(mean_feats, dif_n).squeeze()
-            breakpoint()
             loss = loss_bce(pred, gt)
             loss.backward()
             optim.step()
