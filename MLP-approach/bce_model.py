@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from dinov2.models.vision_transformer import vit_small, vit_base
+from torchvision import models 
 
 class BCEGraspTransformer(nn.Module):
 
@@ -40,16 +41,32 @@ class BCEGraspTransformer(nn.Module):
             nn.Sigmoid()
         )
         
+        #self.conv_head = nn.Sequential(
+        #    nn.Conv2d(in_channels=768, out_channels=256, kernel_size=3, stride=1, padding=0, bias=True),
+        #    nn.ReLU(),
+        #    nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1, stride=1, padding=0, bias=True),
+        #)
+        resnet18 = models.resnet18(pretrained=True).layer4
+        #self.conv_head = nn.Sequential(
+        #    nn.Conv2d(768,256,kernel_size=1),
+        #    resnet18,
+        #    nn.Conv2d(512,128,kernel_size=1),
+        #    )
+        #self.conv_head_center = nn.Sequential(
+        #    nn.Conv2d(768,256,kernel_size=1),
+        #    resnet18,
+        #    nn.Conv2d(512,128,kernel_size=1),
+
         self.conv_head = nn.Sequential(
-            nn.Conv2d(in_channels=768, out_channels=256, kernel_size=3, stride=1, padding=0, bias=True),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1, stride=1, padding=0, bias=True),
-        )
+            nn.Conv2d(768,512,kernel_size=1)) 
+        
+        self.conv_head_center = nn.Sequential(
+            nn.Conv2d(768,512,kernel_size=1)) 
         
         self.conv_linear_head = nn.Sequential(
-            nn.Linear(256+1, 64),
+            nn.Linear(1024 + 512+1, 512),
             nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(512, 1),
             nn.Sigmoid()
         )
         
@@ -71,6 +88,12 @@ class BCEGraspTransformer(nn.Module):
         get conv forward features around a small feature patch 
         '''
         return self.conv_head(feats)
+    
+    def forward_center(self, feats):
+        '''
+        get conv forward features around a small feature patch 
+        '''
+        return self.conv_head_center(feats)
     
     def forward_both_convs(self,feats_fused,diffs):
         '''
