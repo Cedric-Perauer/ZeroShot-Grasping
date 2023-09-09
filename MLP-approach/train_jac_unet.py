@@ -7,6 +7,7 @@ from utils_train import create_correct_false_points, create_correct_false_grasps
 import random
 import torch.nn.functional as F
 from pytorch_lightning.loggers import TensorBoardLogger
+from unet import UNet
 
 def train(dataset, model, args_train, device):
     params = [
@@ -27,6 +28,10 @@ def train(dataset, model, args_train, device):
     logger = TensorBoardLogger("logs", name=args_train['experiment_name'])
     iter = 0.
     tot_iter = 0
+    
+    
+    Unet = UNet(n_channels=2,n_classes=1)
+    
     for epoch in range(args_train["num_epochs"]):
         for i in range(len(dataset)):
             optim.zero_grad()
@@ -41,12 +46,11 @@ def train(dataset, model, args_train, device):
             grasp = torch.cat([grasp, grasp_inv], dim=0)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            create_unet_mask(data['resized_mask'].to(device),grasp)
+            input_mask,output_mask  = create_unet_mask(data['resized_mask'].to(device),grasp)
             
-            #pred = model(mean_feats, dif_n).squeeze()
-            #loss = loss_bce(pred, gt)
-            #loss.backward()
-            #optim.step()
+            output_predicted_mask = Unet(input_mask)
+            breakpoint()
+            
 
 
             train_loss_running += loss.item()

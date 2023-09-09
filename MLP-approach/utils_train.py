@@ -31,7 +31,15 @@ def create_unet_mask(mask,grasp):
     grasp_one = grasp[0,0]
     y,x = grasp_one[0], grasp_one[1]
     y_goal,x_goal = grasp[0,1]
-    #show_mask_vis(mask,[x,y],[x_goal,y_goal])
+    img_width = mask.shape[2]
+    input_mask = torch.zeros((1,2,img_width,img_width))
+    output_mask = torch.zeros((1,1,img_width,img_width))
+    input_mask[0] = mask
+    input_mask[0,1,x,y] = 1
+    output_mask[0,0,x_goal,y_goal] = 1
+    
+    return input_mask, output_mask
+    
 
 def extract_random_elements(tensor, num_elements):
     num_total_elements = tensor.shape[0]  # Total number of elements in the tensor
