@@ -8,6 +8,7 @@ import random
 import torch.nn.functional as F
 from pytorch_lightning.loggers import TensorBoardLogger
 from unet import UNet
+import torch.nn as nn
 
 def train(dataset, model, args_train, device):
     params = [
@@ -32,6 +33,10 @@ def train(dataset, model, args_train, device):
     
     Unet = UNet(n_channels=2,n_classes=1)
     
+    l1_loss = nn.L1Loss()
+    
+    Unet.train()
+    
     for epoch in range(args_train["num_epochs"]):
         for i in range(len(dataset)):
             optim.zero_grad()
@@ -46,12 +51,18 @@ def train(dataset, model, args_train, device):
             grasp = torch.cat([grasp, grasp_inv], dim=0)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            input_mask,output_mask  = create_unet_mask(data['resized_mask'].to(device),grasp)
+            input_mask,output_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp)
             
-            output_predicted_mask = Unet(input_mask)
-            breakpoint()
-            
+            predicted_mask = Unet(input_mask)
+            max_indices = torch.argmax(predicted_mask[0,0])
+            row_index, col_index = divmod(max_indices.item(), predicted_mask[0,0].shape[1])
 
+            #print('gt_coords',gt_coords)
+            pred = torch.tensor([row_index,col_index],dtype=torch.float32).unsqueeze(0)/ data['resized_mask'].shape[2]
+            loss = l1_loss(pred,gt_coords)
+            
+            loss.backward() 
+            optim.step()
 
             train_loss_running += loss.item()
             tot_iter = tot_iter + 1

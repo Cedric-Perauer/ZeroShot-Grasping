@@ -38,7 +38,11 @@ def create_unet_mask(mask,grasp):
     input_mask[0,1,x,y] = 1
     output_mask[0,0,x_goal,y_goal] = 1
     
-    return input_mask, output_mask
+    output_coords = torch.tensor([x_goal,y_goal],dtype=torch.float32).unsqueeze(0)
+    
+    output_coords = output_coords / img_width
+    
+    return input_mask, output_mask, output_coords
     
 
 def extract_random_elements(tensor, num_elements):
