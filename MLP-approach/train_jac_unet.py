@@ -23,14 +23,17 @@ def soft_argmax(inp,size=80):
         return torch.stack([exp_x, exp_y], -1)
 
 
-def train(dataset, model, args_train, device):
+def train(dataset, args_train, device):
+    
+    model = UNet(n_channels=2,n_classes=1)
+    
+    l1_loss = nn.L1Loss()
+    
+    model.train()
+    
     params = [
         {
-            'params': model.linear_head.parameters(),
-            'lr': args_train["lr"]
-        },
-        {
-            'params': model.linear_head2.parameters(),
+            'params':model.parameters(),
             'lr': args_train["lr"]
         }
 
@@ -44,11 +47,6 @@ def train(dataset, model, args_train, device):
     tot_iter = 0
     
     
-    Unet = UNet(n_channels=2,n_classes=1)
-    
-    l1_loss = nn.L1Loss()
-    
-    Unet.train()
     
     for epoch in range(args_train["num_epochs"]):
         for i in range(len(dataset)):
@@ -61,20 +59,18 @@ def train(dataset, model, args_train, device):
             obj_mask = data['mask'].to(device)  
             grasp = data["points_grasp"]//14
             grasp_inv = torch.cat([grasp[:,1,:].unsqueeze(1), grasp[:,0,:].unsqueeze(1)], dim=1)
-            grasp = torch.cat([grasp, grasp_inv], dim=0)
+            grasp = torch.cat([grasp, grasp_inv], dim=0).to(device)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp)
             
-            predicted_mask = Unet(input_mask)
+            predicted_mask = model(input_mask)
             
-            hm = flat_softmax(predicted_mask)
-            pred = soft_argmax(hm)
-            print(pred)
-            print(gt_coords)
-            #pred = torch.tensor([row_index,col_index],dtype=torch.float32).unsqueeze(0)/ data['resized_mask'].shape[2]
+            #hm = flat_softmax(predicted_mask)
+            #pred = soft_argmax(hm)
             
-            loss = l1_loss(pred,gt_coords)
+            #loss = l1_loss(pred[0,0],gt_coords[0,0])
+            loss = l1_loss(predicted_mask,gt_mask)
             
             loss.backward() 
             optim.step()
@@ -91,16 +87,15 @@ def train(dataset, model, args_train, device):
                     'iter': tot_iter
                 }, tot_iter)
                 train_loss_running = 0.
-            break
+    
     torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
 
 
 def main(args_train):
     device = torch.device(args_train["device"])
     image_transform = get_transform()
-    model = BCEGraspTransformer(img_size=args_train["img_size"])
     dataset = JacquardSamples(dataset_root= args_train["split"] ,image_transform=image_transform, num_targets=5, overfit=False,
                               img_size=args_train["img_size"], idx=args_train["num_objects"])
     print(len(dataset))
     device = args_train["device"] if torch.cuda.is_available() else "cpu"
-    train(dataset, model, args_train, device)
+    train(dataset, args_train, device)

@@ -32,15 +32,15 @@ def create_unet_mask(mask,grasp):
     y,x = grasp_one[0], grasp_one[1]
     y_goal,x_goal = grasp[0,1]
     img_width = mask.shape[2]
-    input_mask = torch.zeros((1,2,img_width,img_width))
-    output_mask = torch.zeros((1,1,img_width,img_width))
+    input_mask = torch.zeros((1,2,img_width,img_width)).to(mask.device)
+    output_mask = torch.zeros((1,1,img_width,img_width)).to(mask.device)
     input_mask[0] = mask
     input_mask[0,1,x,y] = 1
     output_mask[0,0,x_goal,y_goal] = 1
     
-    output_coords = torch.tensor([x_goal,y_goal],dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+    output_coords = torch.tensor([x_goal,y_goal],dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(mask.device)
     
-    output_coords = output_coords
+    output_coords = output_coords / img_width
     
     return input_mask, output_mask, output_coords
     

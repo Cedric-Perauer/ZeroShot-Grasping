@@ -11,13 +11,18 @@ from pytorch_lightning.loggers import TensorBoardLogger
 def train(dataset, model, args_train, device):
     params = [
         {
-            'params': model.linear_head.parameters(),
+            'params': model.conv_linear_head.parameters(),
             'lr': args_train["lr"]
         },
         {
-            'params': model.linear_head2.parameters(),
+            'params': model.conv_head_center.parameters(),
+            'lr': args_train["lr"]
+        },
+        {
+            'params': model.conv_head.parameters(),
             'lr': args_train["lr"]
         }
+
 
     ]
     optim = torch.optim.Adam(params)
@@ -44,17 +49,16 @@ def train(dataset, model, args_train, device):
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             all_points = torch.cat([grasp[:args_train['batch_size']].to(device), false_points.to(device)], dim=0).to(device)
             features, clk = model.forward_dino_features(img.unsqueeze(0))
-
             features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 768)
             #features = features * attn_norms.unsqueeze(2)
             mean_feats=[]
             dif = (all_points[:, 0, :] - all_points[:, 1, :]).type(torch.float32).norm(p=2, dim=1)
             #dif_gt_mean = dif[:args_train["batch_size"]].mean()
             dif_n = (dif/mask).unsqueeze(1)
-            patch_area = 1
-            padding = (1, 1, 1, 1)
-            features = F.pad(features.reshape(768,80,80), padding, value=0).reshape(82,82,768)  ##pad for ROI extraction, if points are on the edges of the map 
-            
+            patch_area = 4
+            #padding = (1, 1, 1, 1)
+            #features = F.pad(features.reshape(768,80,80), padding, value=0).reshape(82,82,768)  ##pad for ROI extraction, if points are on the edges of the map 
+             
             for i in range(all_points.shape[0]):
                 #imix = int(all_points[i,:,0].min().item())
                 #ymix = int(all_points[i,:,1].min().item())
@@ -62,26 +66,32 @@ def train(dataset, model, args_train, device):
                 #ymax = int(all_points[i,:,1].max().item())
                 x1,y1 = int(all_points[i,0,0].item()), int(all_points[i,0,1].item())
                 x2,y2 = int(all_points[i,1,0].item()), int(all_points[i,1,1].item())
+                xc,yc = int((x1+x2)/2), int((y1+y2)/2)
                 
-                features_cur1 = features[x1:x1+patch_area+2, y1:y1+patch_area+2, :]
-                features_cur2 = features[x2:x2+patch_area+2, y2:y2+patch_area+2, :]
-                
+                features_cur1 =   features[x1 - patch_area//2 : x1 + patch_area//2, y1 - patch_area//2 : y1 + patch_area//2, :]
+                features_cur2 =   features[x2 - patch_area//2 : x2 + patch_area//2, y2 - patch_area//2 : y2 + patch_area//2, :]
+                features_center = features[xc - patch_area//2 : xc + patch_area//2, yc - patch_area//2 : yc + patch_area//2, :]
                 #conv_features1 = model.forward_conv(features1.reshape(768,3,3).unsqueeze(0))     
                 #conv_features2 = model.forward_conv(features2.reshape(768,3,3).unsqueeze(0)) 
-                    
                 #attn_i = attn_norms[imix:imax+1, ymix:ymax+1].mean()
                 #features_i = features_i.reshape(features_i.shape[0] * features_i.shape[1], features_i.shape[2]).mean(0)
                 #features_i = torch.cat([features_i, clk.squeeze()], dim=0)
+                print("shapes", features_cur1.shape, features_cur2.shape, features_center.shape)
                 if i == 0:
                     features1 = features_cur1.unsqueeze(0)
                     features2 = features_cur2.unsqueeze(0)
+                    features_c = features_center.unsqueeze(0)
                 else:
-                    features1 = torch.cat([features1, features_cur1.unsqueeze(0)], dim=0)
-                    features2 = torch.cat([features2, features_cur2.unsqueeze(0)], dim=0)
+                    features1 = torch.cat([features1, features_cur1.unsqueeze(0)], dim=0)   
+                    features2 = torch.cat([features2, features_cur2.unsqueeze(0)], dim=0)   
+                    features_c = torch.cat([features_c, features_center.unsqueeze(0)], dim=0)
+                       
             
-            conv_features1 = model.forward_conv(features1.reshape(-1,768,3,3))  
-            conv_features2 = model.forward_conv(features2.reshape(-1,768,3,3))  
-            stacked = torch.cat([conv_features1, conv_features2], dim=1).reshape(all_points.shape[0],-1)
+            conv_features1 = model.forward_conv(features1.reshape(-1,768,4,4))  
+            conv_features2 = model.forward_conv(features2.reshape(-1,768,4,4)) 
+            conv_featuresc = model.forward_center(features_c.reshape(-1,768,4,4)) 
+            #breakpoint() 
+            stacked = torch.cat([conv_features1, conv_features2,conv_featuresc], dim=1).reshape(all_points.shape[0],-1)
             gt = torch.cat([torch.ones(args_train["batch_size"]), torch.zeros(args_train["batch_size"])]).to(device)
             pred = model.forward_both_convs(stacked, dif_n).squeeze() 
             #pred = model(mean_feats, dif_n).squeeze()
