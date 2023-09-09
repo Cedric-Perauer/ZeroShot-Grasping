@@ -10,6 +10,16 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from unet import UNet
 import torch.nn as nn
 
+
+
+def soft_argmax(inp,size=80):
+        values_y = torch.linspace(0, (size - 1.) / size, size, dtype=inp.dtype, device=inp.device)
+        values_x = torch.linspace(0, (size - 1.) / size, size, dtype=inp.dtype, device=inp.device)
+        exp_y = (inp.sum(3) * values_y).sum(-1)
+        exp_x = (inp.sum(2) * values_x).sum(-1)
+        return torch.stack([exp_x, exp_y], -1)
+
+
 def train(dataset, model, args_train, device):
     params = [
         {
@@ -51,14 +61,15 @@ def train(dataset, model, args_train, device):
             grasp = torch.cat([grasp, grasp_inv], dim=0)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            input_mask,output_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp)
+            input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp)
             
             predicted_mask = Unet(input_mask)
-            max_indices = torch.argmax(predicted_mask[0,0])
-            row_index, col_index = divmod(max_indices.item(), predicted_mask[0,0].shape[1])
-
-            #print('gt_coords',gt_coords)
-            pred = torch.tensor([row_index,col_index],dtype=torch.float32).unsqueeze(0)/ data['resized_mask'].shape[2]
+            
+            pred = soft_argmax(predicted_mask)
+            print(pred)
+            print(gt_coords)
+            #pred = torch.tensor([row_index,col_index],dtype=torch.float32).unsqueeze(0)/ data['resized_mask'].shape[2]
+            
             loss = l1_loss(pred,gt_coords)
             
             loss.backward() 
@@ -76,6 +87,7 @@ def train(dataset, model, args_train, device):
                     'iter': tot_iter
                 }, tot_iter)
                 train_loss_running = 0.
+            break
     torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
 
 
