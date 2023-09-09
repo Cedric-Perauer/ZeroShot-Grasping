@@ -10,7 +10,10 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from unet import UNet
 import torch.nn as nn
 
-
+def flat_softmax(inp,size=80):
+        flat = inp.view(-1, size * size)
+        flat = torch.nn.functional.softmax(flat, 1)
+        return flat.view(-1, 1, size, size)
 
 def soft_argmax(inp,size=80):
         values_y = torch.linspace(0, (size - 1.) / size, size, dtype=inp.dtype, device=inp.device)
@@ -65,7 +68,8 @@ def train(dataset, model, args_train, device):
             
             predicted_mask = Unet(input_mask)
             
-            pred = soft_argmax(predicted_mask)
+            hm = flat_softmax(predicted_mask)
+            pred = soft_argmax(hm)
             print(pred)
             print(gt_coords)
             #pred = torch.tensor([row_index,col_index],dtype=torch.float32).unsqueeze(0)/ data['resized_mask'].shape[2]
