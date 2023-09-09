@@ -6,8 +6,32 @@ import time
 from shapely.geometry import Polygon
 from metrics_utils import oriented_bounding_box_iou, grasp_correct_full
 
+
+
 IMAGE_SIZE = 1120
 PATCH_DIM = IMAGE_SIZE  // 14
+
+def show_mask_vis(mask,grasp_one,grasp_two):
+    '''
+    visualises the grasp points around the mask 
+    '''
+    x,y = grasp_one
+    x_goal, y_goal = grasp_two
+    mask_vis = mask[0].cpu().detach().numpy()
+    vis = np.zeros((3,mask_vis.shape[0],mask_vis.shape[1]))
+    vis[0] = mask_vis
+    vis[1,x_goal,y_goal] = 1
+    vis[2,x,y] = 1
+    vis = np.transpose(vis,(1,2,0))
+    plt.imshow(vis)
+    plt.show()
+    
+
+def create_unet_mask(mask,grasp):
+    grasp_one = grasp[0,0]
+    y,x = grasp_one[0], grasp_one[1]
+    y_goal,x_goal = grasp[0,1]
+    #show_mask_vis(mask,[x,y],[x_goal,y_goal])
 
 def extract_random_elements(tensor, num_elements):
     num_total_elements = tensor.shape[0]  # Total number of elements in the tensor
@@ -91,21 +115,17 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
         for g in grasps_right :
             grasp_vis_right[int(g[0]),int(g[1])] = 1
         
-                        
         grasp_vis_left = grasp_vis_left.unsqueeze(0).unsqueeze(0)
         grasp_vis_right = grasp_vis_right.unsqueeze(0).unsqueeze(0)
         grasp_vis_left = torch.nn.functional.interpolate(grasp_vis_left, (PATCH_DIM, PATCH_DIM), mode="nearest").squeeze()
         grasp_vis_right = torch.nn.functional.interpolate(grasp_vis_right, (PATCH_DIM, PATCH_DIM), mode="nearest").squeeze()
         zeros = torch.zeros(PATCH_DIM, PATCH_DIM, 1)
         grasp_vis = torch.cat([grasp_vis_right.cpu().detach().unsqueeze(2),grasp_vis_left.cpu().detach().unsqueeze(2), grasp_vis_right.cpu().detach().unsqueeze(2)], dim = 2)
-
         
         one_indices_vis = torch.nonzero(mask[0] == 1)  
         mask_tensor = mask[0] == 1     
         mask_tensor = torch.logical_not(mask_tensor)
         zero_indices_vis = torch.nonzero(mask_tensor)
-
-        
 
         mask_vis = torch.zeros((PATCH_DIM, PATCH_DIM))
         for idcs in one_indices_vis:
@@ -115,7 +135,6 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
         zeros = torch.zeros(IMAGE_SIZE, IMAGE_SIZE, 1)
         mask_vis = torch.cat([mask_vis.cpu().detach().unsqueeze(2), zeros, zeros], dim = 2)
         mask_vis1 = torch.cat([mask_vis1.squeeze().cpu().detach().unsqueeze(2), torch.zeros(PATCH_DIM,PATCH_DIM,1), torch.zeros(PATCH_DIM,PATCH_DIM,1)], dim = 2)
-        
         
         false_objects_vis = torch.zeros((PATCH_DIM, PATCH_DIM))
         for idcs in false_points_object:
@@ -148,7 +167,6 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
         axs[0].imshow(show_img)
         axs[1].imshow(show_img2)
         plt.show()
-    
     
     return torch.cat([false_points_object,false_points_grasp],dim=0), grasps_left, grasps_right
             
@@ -221,7 +239,9 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     #combine left and right with wrong points far away from mask and non grasp 
     wrong_far_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
     wrong_far_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
-
+    
+    
+    
     #combine left and right points in different ways to form incorrect grasp pairs, use metrics to check for true incorrect grasp pairs
     wrong_left_right_grasp = torch.cat((grasps_left.unsqueeze(2), grasps_right.unsqueeze(2)), dim=2).to(device)
     wrong_right_left_grasp = torch.cat((grasps_right.unsqueeze(2), grasps_left.unsqueeze(2)), dim=2).to(device)
@@ -242,7 +262,11 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         
         if correct_flag == False :
             ##add to false grasps 
-            false_grasps.append(wrong_grasp)
+            flattened = wrong_grasp.reshape(-1)
+            smaller = torch.any(flattened < 2).item()
+            bigger  = torch.any(flattened > 78).item()
+            if smaller == False and bigger == False :
+                false_grasps.append(wrong_grasp)
     
     for wrong_grasp in wrong_right_left_grasp :
         correct_flag = False
@@ -256,8 +280,12 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
                 break 
         
         if correct_flag == False :
-            ##add to false grasps 
-            false_grasps.append(wrong_grasp)
+            ##add to false grasps
+            flattened = wrong_grasp.reshape(-1)
+            smaller = torch.any(flattened < 2).item()
+            bigger  = torch.any(flattened > 78).item()
+            if smaller == False and bigger == False :
+                false_grasps.append(wrong_grasp) 
     
     false_grasps_tensor = torch.zeros((len(false_grasps), 2, 2))
     for idx,wrong_grasp in enumerate(false_grasps) :
@@ -266,10 +294,12 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     ##concatenate points together with total size of batch size
     bs_6 = int(bs / 6) 
     wrong_far_grasps = torch.cat((wrong_far_grasps_right[:bs_6],wrong_far_grasps_left[:bs_6]), dim=0)
-    wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:bs_6],wrong_mask_grasps_left[:bs_6]), dim=0)
+    wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:int(bs_6 * 2)],wrong_mask_grasps_left[:int(bs_6 * 2)]), dim=0)
+    #wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:bs_6],wrong_mask_grasps_left[:bs_6 ]), dim=0)
     remaining = bs - (bs_6 * 4) #size of false grasps tensor to combine correct shape 
     false_grasps_tensor = false_grasps_tensor[:remaining]
-    false_grasps_total = torch.cat([wrong_far_grasps.to(device), wrong_mask_grasps.to(device), false_grasps_tensor.to(device)], dim=0)
+    #false_grasps_total = torch.cat([wrong_far_grasps.to(device), wrong_mask_grasps.to(device), false_grasps_tensor.to(device)], dim=0)
+    false_grasps_total = torch.cat([wrong_mask_grasps.to(device), false_grasps_tensor.to(device)], dim=0)
     
     ## vis the data 
     if VIS : 
@@ -354,8 +384,9 @@ def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
     
 def create_correct_false_grasps_mask(grasp, bs,mask,height,img=None,VIS=False):
     false_points_mask, _, _  = create_false_grasps_mask(grasp,mask,bs,height,img,VIS)
-
-    
+    if false_points_mask.shape[0] != 64 :
+        missing_bs = 64 - false_points_mask.shape[0] 
+        false_points_mask = torch.cat([false_points_mask, false_points_mask[:missing_bs]], dim=0)
     return false_points_mask
 
 
