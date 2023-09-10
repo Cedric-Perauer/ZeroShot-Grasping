@@ -9,6 +9,29 @@ import torch.nn.functional as F
 from pytorch_lightning.loggers import TensorBoardLogger
 from unet import UNet
 import torch.nn as nn
+import matplotlib.pyplot as plt
+
+
+
+class CustomLoss(nn.Module):
+    def __init__(self, weight=None):
+        super(CustomLoss, self).__init__()
+        self.weight_dark =  1 / (80 * 79.) 
+        self.weight_light = 1 - self.weight_dark
+        self.weight_map = torch.ones((1,1,80,80)).to('cuda:0') * self.weight_dark
+
+    def forward(self, pred, target,gt_coords):
+        # Calculate your custom loss here
+        gt_coords = gt_coords * 80
+        self.weight_map[0,0,int(gt_coords[0,0,0]),int(gt_coords[0,0,1])] = self.weight_light
+        #breakpoint()
+        loss = F.binary_cross_entropy(F.sigmoid(pred[0,0]), target[0,0])
+        # loss = (torch.abs(pred - target)) 
+        
+        loss = loss * self.weight_map
+        
+        loss = loss.sum(2).sum(2).reshape(1,)
+        return loss
 
 def flat_softmax(inp,size=80):
         flat = inp.view(-1, size * size)
@@ -23,11 +46,23 @@ def soft_argmax(inp,size=80):
         return torch.stack([exp_x, exp_y], -1)
 
 
+def vis_image(gt_mask,x,y): 
+    img = np.zeros((80,80,3))
+    img[:,:,0] = gt_mask
+    #breakpoint()
+    img[x,y,2] = 1.0 
+    
+    plt.imshow(img)
+    plt.show()
+    
+    
+
 def train(dataset, args_train, device):
     
     model = UNet(n_channels=2,n_classes=1)
     
-    l1_loss = nn.L1Loss()
+    #l1_loss = nn.L1Loss()
+    l1_loss = CustomLoss()
     
     model.train()
     
@@ -65,12 +100,25 @@ def train(dataset, args_train, device):
             input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp)
             
             predicted_mask = model(input_mask)
+            max_indices = torch.argmax(predicted_mask[0,0])
+            row_index = max_indices//80
             
+            col_index = max_indices%80
             #hm = flat_softmax(predicted_mask)
             #pred = soft_argmax(hm)
             
+            #print('pred',pred)
+            #print('rows,cols',row_index,col_index)
+            #print('gt_coords',gt_coords * 80)
+            if epoch  > 40 : 
+                vis_image(gt_mask.cpu().numpy(),row_index,col_index)
+                
+            
+            
+            
+            
             #loss = l1_loss(pred[0,0],gt_coords[0,0])
-            loss = l1_loss(predicted_mask,gt_mask)
+            loss = l1_loss(predicted_mask,gt_mask,gt_coords)
             
             loss.backward() 
             optim.step()
