@@ -32,7 +32,8 @@ def get_unet_preds(unet,valid_pts_pred,mask):
     max_indices_1d = torch.argmax(preds.view(valid_pts_pred.shape[0], -1), dim=1)
     y_indices = max_indices_1d // 80
     x_indices = max_indices_1d % 80
-    max_indices = torch.stack((x_indices, y_indices), dim=-1)
+    conf_vals = preds[torch.arange(preds.shape[0]), :, x_indices, y_indices] 
+    max_indices = torch.stack((x_indices, y_indices), dim=-1), conf_vals
     
     return max_indices
 
