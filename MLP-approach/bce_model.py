@@ -6,7 +6,7 @@ from torchvision import models
 
 class BCEGraspTransformer(nn.Module):
 
-    def __init__(self, img_size=224, input_dim=768, output_dim=32, int_dim=256,input_cls=3):
+    def __init__(self, img_size=224, input_dim=768, output_dim=32, int_dim=256,input_cls=1):
         super(BCEGraspTransformer, self).__init__()
         self.img_size = img_size
         self.dinov2d_backbone = vit_base(

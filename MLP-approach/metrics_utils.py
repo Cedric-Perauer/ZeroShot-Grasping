@@ -53,10 +53,9 @@ def grasp_correct_full(pred_point, single_point, gt_grasp,heights,thresh_angle=3
         iou_flag = False
         
         ##1) angle verifier 
-        vec_pred_to_single = (pred_point - single_point).to(torch.float64) #vector of the prediction grasps
-        vec_single_to_gt = (gt_grasp[0] - gt_grasp[1]).to(torch.float64) #vector of the ground truth grasps
-        vec_single_to_gt_rev = (gt_grasp[1] - gt_grasp[0]).to(torch.float64) #vector of the ground truth grasps
-
+        vec_pred_to_single = (pred_point - single_point).to(torch.float64).cpu() #vector of the prediction grasps
+        vec_single_to_gt = (gt_grasp[0] - gt_grasp[1]).to(torch.float64).cpu() #vector of the ground truth grasps
+        vec_single_to_gt_rev = (gt_grasp[1] - gt_grasp[0]).to(torch.float64).cpu() #vector of the ground truth grasps
 
         vec_pred_to_single = vec_pred_to_single/torch.norm(vec_pred_to_single)
         vec_single_to_gt = vec_single_to_gt / torch.norm(vec_single_to_gt)
@@ -94,7 +93,9 @@ def grasp_correct_full(pred_point, single_point, gt_grasp,heights,thresh_angle=3
                 angle_flag = True
                 angle_return = torch.tensor(0, dtype=torch.float64)
 
-        
+        single_point = single_point.cpu()
+        gt_grasp = gt_grasp.cpu()
+        pred_point = pred_point.cpu()
         corner_points_gt = create_oriented_bounding_box(gt_grasp[0].to(torch.float32),gt_grasp[1].to(torch.float32),heights)
         corner_points_pred = create_oriented_bounding_box(single_point.to(torch.float32),pred_point.to(torch.float32),heights)
         
