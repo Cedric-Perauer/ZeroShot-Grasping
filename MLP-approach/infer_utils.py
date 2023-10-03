@@ -25,7 +25,7 @@ def get_unet_preds(unet,valid_pts_pred,mask):
     for i in range(valid_pts_pred.shape[0]):
         input_mask = torch.zeros(1,2,80,80).to(mask.device)
         input_mask[0] = mask
-        x,y = valid_pts_pred[i,0,0], valid_pts_pred[i,0,1]
+        x,y = valid_pts_pred[i,0,1], valid_pts_pred[i,0,0]
         input_mask[0,1,int(x.cpu().item()),int(y.cpu().item())] = 1 
         input_masks[i] = input_mask
     preds = unet(input_masks.to(mask.device))
