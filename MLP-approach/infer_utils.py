@@ -20,6 +20,23 @@ def get_features(data, model, device, args_infer):
 
     return img, mask, grasp, height, corners
 
+def get_unet_preds(unet,valid_pts_pred,mask):
+    input_masks = torch.zeros((valid_pts_pred.shape[0],2,80,80))
+    for i in range(valid_pts_pred.shape[0]):
+        input_mask = torch.zeros(1,2,80,80).to(mask.device)
+        input_mask[0] = mask
+        x,y = valid_pts_pred[i,0,0], valid_pts_pred[i,0,1]
+        input_mask[0,1,int(x.cpu().item()),int(y.cpu().item())] = 1 
+        input_masks[i] = input_mask
+    preds = unet(input_masks.to(mask.device))
+    max_indices_1d = torch.argmax(preds.view(valid_pts_pred.shape[0], -1), dim=1)
+    y_indices = max_indices_1d // 80
+    x_indices = max_indices_1d % 80
+    max_indices = torch.stack((x_indices, y_indices), dim=-1)
+    
+    return max_indices
+
+
 def test_single_point(grasp, mask, device, features, model, args_infer, point_idx,heights,single_point=None):
     if single_point is not None : 
         pass

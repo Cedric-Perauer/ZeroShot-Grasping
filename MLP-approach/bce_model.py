@@ -56,26 +56,6 @@ class BCEGraspTransformer(nn.Module):
         #    resnet18,
         #    nn.Conv2d(512,128,kernel_size=1),
 
-        self.conv_head = nn.Sequential(
-            nn.Conv2d(768,512,kernel_size=2,stride=2),
-            nn.ReLU(),
-            nn.AvgPool2d((2,2)),
-            ) 
-        
-        self.conv_head_center = nn.Sequential(
-            nn.Conv2d(768,512,kernel_size=2,stride=2),
-            nn.ReLU(),
-            nn.AvgPool2d((2,2)),
-            ) 
-        #self.conv_head_center = nn.Sequential(
-        #    nn.Conv2d(768,512,kernel_size=1)) 
-        
-        self.conv_linear_head = nn.Sequential(
-            nn.Linear(1024+512+1, 512),
-            nn.ReLU(),
-            nn.Linear(512, 1),
-            nn.Sigmoid()
-        )
         
     def forward_dino_features(self, img):
         ret_list = self.dinov2d_backbone.forward_features(img)
