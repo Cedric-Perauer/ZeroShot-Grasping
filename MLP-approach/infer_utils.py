@@ -25,7 +25,7 @@ def get_unet_preds(unet,valid_pts_pred,mask):
     for i in range(valid_pts_pred.shape[0]):
         input_mask = torch.zeros(1,2,80,80).to(mask.device)
         input_mask[0] = mask
-        x,y = valid_pts_pred[i,0,1], valid_pts_pred[i,0,0]
+        x,y = valid_pts_pred[i,0,1], valid_pts_pred[i,0,0   ]
         input_mask[0,1,int(x.cpu().item()),int(y.cpu().item())] = 1 
         input_masks[i] = input_mask
     preds = unet(input_masks.to(mask.device))
@@ -415,7 +415,7 @@ def get_predictions_left_right(num_grasps, data,constrain_mode = False):
     return items 
 
 
-def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,preds_cp, topks=10,vis=False): 
+def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,preds_cp, topks=10,vis=True): 
     items = sorted(items, key=lambda x: x['conf'], reverse=True)
     top_k_preds = topks if topks <= num_grasps else num_grasps
 
@@ -452,7 +452,7 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
                         best_corner_preds = corner_points_pred.clone()
                         best_iou = iou
                         best_angle_diff = angle_diff
-                        return 100
+                        break 
                         
                     
                     if correct_end == True :
@@ -471,12 +471,11 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
                             best_angle_diff = angle_diff
                             best_corner_pts = corner_points.clone()
                             best_corner_preds = corner_points_pred.clone()
-
         if correct_end == True :
             correct_cnt += 1
         total_cnt += 1
         
-        if vis == True : 
+        if True == True : 
             for pt in best_corner_pts : 
                 new_x = int(pt[0]) 
                 new_y = int(pt[1])
