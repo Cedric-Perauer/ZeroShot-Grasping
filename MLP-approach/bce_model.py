@@ -46,7 +46,6 @@ class BCEGraspTransformer(nn.Module):
         #    nn.ReLU(),
         #    nn.Conv2d(in_channels=256, out_channels=128, kernel_size=1, stride=1, padding=0, bias=True),
         #)
-        resnet18 = models.resnet18(pretrained=True).layer4
         #self.conv_head = nn.Sequential(
         #    nn.Conv2d(768,256,kernel_size=1),
         #    resnet18,
@@ -58,13 +57,21 @@ class BCEGraspTransformer(nn.Module):
         #    nn.Conv2d(512,128,kernel_size=1),
 
         self.conv_head = nn.Sequential(
-            nn.Conv2d(768,512,kernel_size=1)) 
+            nn.Conv2d(768,512,kernel_size=2,stride=2),
+            nn.ReLU(),
+            nn.AvgPool2d((2,2)),
+            ) 
         
         self.conv_head_center = nn.Sequential(
-            nn.Conv2d(768,512,kernel_size=1)) 
+            nn.Conv2d(768,512,kernel_size=2,stride=2),
+            nn.ReLU(),
+            nn.AvgPool2d((2,2)),
+            ) 
+        #self.conv_head_center = nn.Sequential(
+        #    nn.Conv2d(768,512,kernel_size=1)) 
         
         self.conv_linear_head = nn.Sequential(
-            nn.Linear(1024 + 512+1, 512),
+            nn.Linear(1024+512+1, 512),
             nn.ReLU(),
             nn.Linear(512, 1),
             nn.Sigmoid()

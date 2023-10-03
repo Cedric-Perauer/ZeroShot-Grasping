@@ -25,6 +25,13 @@ def get_transform_mask():
     ])
     return image_transform
 
+def get_transform_resized_mask(image_size):
+    image_transform = transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+    ])
+    return image_transform
+
 
 def get_inv_transform():
     invTrans = transforms.Compose([transforms.Normalize(mean=[0., 0., 0.],

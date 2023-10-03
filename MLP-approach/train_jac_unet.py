@@ -10,28 +10,34 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from unet import UNet
 import torch.nn as nn
 import matplotlib.pyplot as plt
+torch.autograd.set_detect_anomaly(True)
 
 
 
 class CustomLoss(nn.Module):
-    def __init__(self, weight=None):
+    def __init__(self, weight=None,batch_size=64):
         super(CustomLoss, self).__init__()
         self.weight_dark =  1 / (80 * 79.) 
         self.weight_light = 1 - self.weight_dark
-        self.weight_map = torch.ones((1,1,80,80)).to('cuda:0') * self.weight_dark
+        self.weight_map = torch.ones((batch_size,1,80,80)).to('cuda:0') * self.weight_dark
 
     def forward(self, pred, target,gt_coords):
         # Calculate your custom loss here
+        self.weight_map = torch.ones((gt_coords.shape[0],1,80,80)).to('cuda:0') * self.weight_dark
         gt_coords = gt_coords * 80
-        self.weight_map[0,0,int(gt_coords[0,0,0]),int(gt_coords[0,0,1])] = self.weight_light
-        #breakpoint()
-        loss = F.binary_cross_entropy(F.sigmoid(pred[0,0]), target[0,0])
-        # loss = (torch.abs(pred - target)) 
+        total_loss = 0.0
+        for i in range(gt_coords.shape[0]):
+            self.weight_map[i,0,int(gt_coords[i,0,0]),int(gt_coords[i,0,1])] = self.weight_light
+            #breakpoint()
         
-        loss = loss * self.weight_map
-        
-        loss = loss.sum(2).sum(2).reshape(1,)
-        return loss
+        for i in range(gt_coords.shape[0]):
+            loss_ce = F.binary_cross_entropy(F.sigmoid(pred[i,0]), target[i,0])  * self.weight_map[i]
+            # loss = (torch.abs(pred - target))  
+            #breakpoint()
+            loss_sum = loss_ce[0].sum(0).sum(0).reshape(1,)
+            total_loss += loss_sum
+            
+        return total_loss
 
 def flat_softmax(inp,size=80):
         flat = inp.view(-1, size * size)
@@ -97,21 +103,24 @@ def train(dataset, args_train, device):
             grasp = torch.cat([grasp, grasp_inv], dim=0).to(device)
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
-            input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp)
-            
+            input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp,args_train)
+            input_mask = input_mask.to(device)
+            gt_mask = gt_mask.to(device)
             predicted_mask = model(input_mask)
-            max_indices = torch.argmax(predicted_mask[0,0])
-            row_index = max_indices//80
             
-            col_index = max_indices%80
+            
+            ## just for vis reasons 
             #hm = flat_softmax(predicted_mask)
             #pred = soft_argmax(hm)
             
             #print('pred',pred)
             #print('rows,cols',row_index,col_index)
             #print('gt_coords',gt_coords * 80)
-            if epoch  > 40 : 
-                vis_image(gt_mask.cpu().numpy(),row_index,col_index)
+            if epoch  > 100 : 
+                max_indices = torch.argmax(predicted_mask[0,0])
+                row_index = max_indices//80
+                col_index = max_indices%80
+                vis_image(gt_mask[0].cpu().numpy(),row_index,col_index)
                 
             
             

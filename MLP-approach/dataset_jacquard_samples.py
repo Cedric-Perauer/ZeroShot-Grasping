@@ -6,7 +6,7 @@ from torchvision import transforms
 import os
 from PIL import Image
 import random
-from utils import get_grasp, get_augmented_angles, get_transform_mask
+from utils import get_grasp, get_augmented_angles, get_transform_mask, get_transform_resized_mask
 
 jacquard_root  = os.getcwd()+ r'/data/categories_mlp_1training_sample/categories/'
 
@@ -23,6 +23,7 @@ class JacquardSamples(Dataset):
         self.dataset_root = jacquard_root + dataset_root
         self.image_transform = image_transform
         self.mask_transform = get_transform_mask()
+        self.mask_transform_resized = get_transform_resized_mask(self.img_size//14)
         self.classes = os.listdir(self.dataset_root)
         print('classes', self.classes)
         self.image_norm_mean = (0.485, 0.456, 0.406)
@@ -73,8 +74,11 @@ class JacquardSamples(Dataset):
         data_dict = {}
         img_raw = Image.open(self.image_paths[index])
         mask = Image.open(self.mask_paths[index])
+        resized_width = self.img_size // 14  
+        resized_mask = self.mask_transform_resized(mask.resize((resized_width, resized_width)))
         img = self.image_transform(img_raw)
         mask = self.mask_transform(mask)
+        path = self.image_paths[index]
 
         points_grasps, gknet_labels, corners = get_grasp(self.grasp_txts[index], self.img_size, self.crop)
         points_grasps = torch.tensor(points_grasps).squeeze()
@@ -82,6 +86,7 @@ class JacquardSamples(Dataset):
         data_dict['points_grasp'] = torch.tensor(points_grasps)
         data_dict['img'] = img
         data_dict['mask'] = mask
+        data_dict['resized_mask'] = resized_mask
         data_dict['corners'] = torch.tensor(corners)
         data_dict['raw'] = torch.tensor(gknet_labels)
         data_dict['angle'] = []
@@ -91,6 +96,7 @@ class JacquardSamples(Dataset):
         data_dict['img_augmented_grasp'] = []
         data_dict['img_augmented_grasp2'] = []
         data_dict['height'] = []
+        data_dict['path'] = path 
         for i in range(gknet_labels.shape[0]):
             angle = random.randint(-180, 180)
             data_dict["angle"].append(angle)

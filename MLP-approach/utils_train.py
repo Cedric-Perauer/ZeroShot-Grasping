@@ -27,28 +27,44 @@ def show_mask_vis(mask,grasp_one,grasp_two):
     plt.show()
     
 
-def create_unet_mask(mask,grasp):
-    grasp_one = grasp[0,0]
-    y,x = grasp_one[0], grasp_one[1]
-    y_goal,x_goal = grasp[0,1]
-    img_width = mask.shape[2]
-    input_mask = torch.zeros((1,2,img_width,img_width)).to(mask.device)
-    output_mask = torch.zeros((1,1,img_width,img_width)).to(mask.device)
-    input_mask[0] = mask
-    input_mask[0,1,x,y] = 1
-    output_mask[0,0,x_goal,y_goal] = 1
+def create_unet_mask(mask,grasp,args_train):
+    batch_size = args_train['batch_size']
+    input_masks = torch.zeros((grasp.shape[0],2,80,80))
+    output_masks = torch.zeros((grasp.shape[0],1,80,80))
+    output_coords = torch.zeros((grasp.shape[0],1,2))
+    for i in range(grasp.shape[0]):
+        grasp_one = grasp[i,0]
+        y,x = grasp_one[0], grasp_one[1]
+        y_goal,x_goal = grasp[i,1]
+        img_width = mask.shape[2]
+        input_mask = torch.zeros((1,2,img_width,img_width)).to(mask.device)
+        output_mask = torch.zeros((1,1,img_width,img_width)).to(mask.device)
+        input_mask[0] = mask
+        input_mask[0,1,x,y] = 1
+        output_mask[0,0,x_goal,y_goal] = 1
+        input_masks[i] = input_mask[0]
+        output_masks[i] = output_mask[0]
     
-    output_coords = torch.tensor([x_goal,y_goal],dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(mask.device)
+        output_coord = torch.tensor([x_goal,y_goal],dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(mask.device)
+        output_coord = output_coord / img_width
+        output_coords[i] = output_coord[0]
     
-    output_coords = output_coords / img_width
+    ##keep only random indices of batch size  
+    indices = torch.randperm(grasp.shape[0])[:batch_size]
+    input_masks = input_masks[indices]
+    output_masks = output_masks[indices]
+    output_coords = output_coords[indices]
     
-    return input_mask, output_mask, output_coords
+    return input_masks, output_masks, output_coords
     
 
-def extract_random_elements(tensor, num_elements):
+def extract_random_elements(tensor, num_elements=None):
     num_total_elements = tensor.shape[0]  # Total number of elements in the tensor
-    indices = torch.randperm(num_total_elements)[:num_elements]  # Generate random indices
-    return tensor[indices,:]
+    if num_elements is not None : 
+        indices = torch.randperm(num_total_elements)[:num_elements]  # Generate random indices
+        return tensor[indices,:]
+    else :
+        return tensor 
 
 
 def create_false_points(minx, maxx, miny, maxy, bs):
@@ -183,7 +199,7 @@ def create_false_points_mask(grasp,mask,bs,img=None,VIS=False):
     return torch.cat([false_points_object,false_points_grasp],dim=0), grasps_left, grasps_right
             
 
-def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=1120):
+def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=1120,mode='limited'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     inv_transform = get_inv_transform()
     mask = mask.permute(0,2,1).unsqueeze(0)
@@ -220,7 +236,7 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
 
     #start = time.time()
     false_points_object = check_and_remove_tensors2(reshaped_grasps, one_indices) ##make sure that no gt grasps are contained due to feature overlap
-    false_points_object = extract_random_elements(false_points_object, bs)
+    false_points_object = extract_random_elements(false_points_object)
     num = false_points_object.shape[0]
     
     second_pts = bs 
@@ -228,7 +244,7 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         second_pts = second_pts + (bs - num)
         
     false_points_grasp = check_and_remove_tensors2(reshaped_grasps, zero_indices) ##make sure that no gt grasps are contained due to feature overlap
-    false_points_grasp = extract_random_elements(false_points_grasp, second_pts)
+    false_points_grasp = extract_random_elements(false_points_grasp)
     
     ##randomly arrange tensor 
     # Get the number of rows (64 in this case)
@@ -245,12 +261,25 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     
     ##combine left and right with wrong points on mask 
     min_dim = min(grasps_left.shape[0],false_points_object.shape[0])
-    wrong_mask_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_object[:min_dim].unsqueeze(2)), dim=2)
-    wrong_mask_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_object[:min_dim].unsqueeze(2)), dim=2)
+    if mode == 'unlimited':
+        try : 
+            min_dim = min(grasps_right.shape[0],false_points_object.shape[0])
+            wrong_mask_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_object[:min_dim].unsqueeze(2)), dim=2)
+            wrong_mask_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_object[:min_dim].unsqueeze(2)), dim=2)
+        except : 
+            breakpoint()
+    else : 
+        wrong_mask_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_object[:min_dim].unsqueeze(2)), dim=2)
+        wrong_mask_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_object[:min_dim].unsqueeze(2)), dim=2)
     
     #combine left and right with wrong points far away from mask and non grasp 
-    wrong_far_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
-    wrong_far_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
+    if mode == 'unlimited':
+        min_dim = min(grasps_right.shape[0],false_points_object.shape[0])
+        wrong_far_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
+        wrong_far_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
+    else : 
+        wrong_far_grasps_right = torch.cat((grasps_right[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
+        wrong_far_grasps_left = torch.cat((grasps_left[:min_dim].unsqueeze(2), false_points_grasp[:min_dim].unsqueeze(2)), dim=2)
     
     
     
@@ -266,8 +295,10 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         for gt in grasp :
             gt = gt.to('cpu')  
             wrong_grasp = wrong_grasp.to('cpu')    
-            corner_points, corner_points_pred, correct, iou, angle_diff = grasp_correct_full(wrong_grasp[0] * 1120/80. + 7, wrong_grasp[1] * 1120/80. + 7, 
-                                                                    gt * 1120/80. + 7,height_average /2. * img_size ) 
+            try : 
+                corner_points, corner_points_pred, correct, iou, angle_diff = grasp_correct_full(wrong_grasp[0] * 1120/80. + 7, wrong_grasp[1] * 1120/80. + 7, gt * 1120/80. + 7,height_average /2. * img_size ) 
+            except : 
+                breakpoint()
             if correct :
                 correct_flag = True
                 break 
@@ -309,7 +340,10 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
     wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:int(bs_6 * 2)],wrong_mask_grasps_left[:int(bs_6 * 2)]), dim=0)
     #wrong_mask_grasps = torch.cat((wrong_mask_grasps_right[:bs_6],wrong_mask_grasps_left[:bs_6 ]), dim=0)
     remaining = bs - (bs_6 * 4) #size of false grasps tensor to combine correct shape 
-    false_grasps_tensor = false_grasps_tensor[:remaining]
+    if mode == 'unlimited':
+        false_grasps_tensor = false_grasps_tensor
+    else : 
+        false_grasps_tensor = false_grasps_tensor[:remaining]
     #false_grasps_total = torch.cat([wrong_far_grasps.to(device), wrong_mask_grasps.to(device), false_grasps_tensor.to(device)], dim=0)
     false_grasps_total = torch.cat([wrong_mask_grasps.to(device), false_grasps_tensor.to(device)], dim=0)
     
@@ -381,8 +415,10 @@ def create_false_grasps_mask(grasp,mask,bs,height,img=None,VIS=False,img_size=11
         axs[1].imshow(show_img2)
         plt.show()
     
-    
-    return false_grasps_total, grasps_left, grasps_right
+    if mode == 'unlimited':
+        return wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps_tensor
+    else : 
+        return false_grasps_total, grasps_left, grasps_right
 
     
 def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
@@ -394,12 +430,11 @@ def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
     
     return false_points_mask, grasps_left, grasps_right
     
-def create_correct_false_grasps_mask(grasp, bs,mask,height,img=None,VIS=False):
-    false_points_mask, _, _  = create_false_grasps_mask(grasp,mask,bs,height,img,VIS)
-    if false_points_mask.shape[0] != 64 :
-        missing_bs = 64 - false_points_mask.shape[0] 
-        false_points_mask = torch.cat([false_points_mask, false_points_mask[:missing_bs]], dim=0)
-    return false_points_mask
+def create_correct_false_grasps_mask(grasp, bs,mask,height,img=None,VIS=False,mode='limited'):
+    wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps \
+        = create_false_grasps_mask(grasp,mask,bs,height,img=img,VIS=VIS,mode=mode)
+
+    return wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps
 
 
 def create_correct_false_points(grasp, bs):
