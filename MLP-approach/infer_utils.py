@@ -415,7 +415,7 @@ def get_predictions_left_right(num_grasps, data,constrain_mode = False):
     return items 
 
 
-def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,preds_cp, topks=10): 
+def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,preds_cp, topks=10,vis=False): 
     items = sorted(items, key=lambda x: x['conf'], reverse=True)
     top_k_preds = topks if topks <= num_grasps else num_grasps
 
@@ -427,7 +427,8 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
         pred_point = items[i]['pred_point'] 
         conf = items[i]['conf']
         correct_end = False
-        plt.figure(figsize=(16,16))
+        if vis == True : 
+            plt.figure(figsize=(16,16))
         best_iou, best_idx = -1,0
         best_corner_pts = None
         best_corner_preds = None
@@ -475,30 +476,32 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
             correct_cnt += 1
         total_cnt += 1
         
-        for pt in best_corner_pts : 
-            new_x = int(pt[0]) 
-            new_y = int(pt[1])
-            boarder = 2
-            origin_point[:,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.zeros((3,boarder*2,boarder*2)) 
-            origin_point[1,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.ones((boarder*2,boarder*2)) 
-        
-        for pt in best_corner_preds : 
+        if vis == True : 
+            for pt in best_corner_pts : 
                 new_x = int(pt[0]) 
                 new_y = int(pt[1])
                 boarder = 2
-                origin_point[:,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.ones((3,boarder*2,boarder*2)) 
-                origin_point[0,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.zeros((boarder*2,boarder*2)) 
-        
-        #origin_point[:,single_point[0] - 2 : single_point[0] + 2 , single_point[1] - 2: single_point[1] + 2] = torch.ones((3,4,4)) * 0.5
-        #origin_point[:,pred_point[0] - 2 : pred_point[0] + 2 , pred_point[1] - 2: pred_point[1] + 2] = torch.ones((3,4,4)) * 0.5
-        if True == True : 
+                origin_point[:,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.zeros((3,boarder*2,boarder*2)) 
+                origin_point[1,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.ones((boarder*2,boarder*2)) 
+            
+            for pt in best_corner_preds : 
+                    new_x = int(pt[0]) 
+                    new_y = int(pt[1])
+                    boarder = 2
+                    origin_point[:,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.ones((3,boarder*2,boarder*2)) 
+                    origin_point[0,new_x - boarder : new_x + boarder , new_y - boarder: new_y + boarder] = torch.zeros((boarder*2,boarder*2)) 
+            
+            #origin_point[:,single_point[0] - 2 : single_point[0] + 2 , single_point[1] - 2: single_point[1] + 2] = torch.ones((3,4,4)) * 0.5
+            #origin_point[:,pred_point[0] - 2 : pred_point[0] + 2 , pred_point[1] - 2: pred_point[1] + 2] = torch.ones((3,4,4)) * 0.5
+
             origin_point = torch.permute(origin_point,(1, 2, 0)).cpu().detach().numpy() + 0.2*preds_cp.cpu().detach().numpy()
             show_img = org_image + 0.7*preds.cpu().detach().numpy() + 0.7*origin_point
             #show_img = org_image + 0.7*origin_point2 + 0.7*origin_point
-            #plt.imshow(show_img)
+            plt.imshow(show_img)
             #plt.title("iou : {} | angle offset : {} degrees |  correct : {} | grasp conf : {}".format(round(best_iou,2),round(best_angle_diff.item(),2)  , correct_end, round(conf,2)))
             #plt.savefig('store_dir/{}.png'.format(i))
-            plt.close()
+            #plt.close()
+        
     #print("Accuracy is {} %".format(round(correct_cnt / total_cnt * 100,2)))
     return correct_cnt / total_cnt * 100
 
