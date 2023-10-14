@@ -9,6 +9,10 @@ Jacquard*
 
 # Distribution / packaging
 *.pt
+*.ckpt
+*.png
+*.jpg  
+runs/ 
 co3d/
 Jacquard/
 .Python
