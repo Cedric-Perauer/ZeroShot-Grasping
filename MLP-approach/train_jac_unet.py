@@ -64,8 +64,12 @@ def vis_image(gt_mask,x,y):
     
 
 def train(dataset, args_train, device):
-    
-    model = UNet(n_channels=2,n_classes=1)
+    print("Training UNet Model ")
+    print(args_train)
+    n_channels = 2 
+    if args_train['rgb']:
+        n_channels += 3
+    model = UNet(n_channels=n_channels,n_classes=1)
     
     #l1_loss = nn.L1Loss()
     l1_loss = CustomLoss()
@@ -104,9 +108,13 @@ def train(dataset, args_train, device):
             #false_points = create_correct_false_points(grasp, args_train["batch_size"])
             #idx = random.sample(range(grasp.shape[0]), args_train["batch_size"])
             input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp,args_train)
-            input_mask = input_mask.to(device)
+            model_input = input_mask.to(device)
             gt_mask = gt_mask.to(device)
-            predicted_mask = model(input_mask)
+            if args_train['rgb']:
+                rgb_data = data['resized_img'].to(device).unsqueeze(0)
+                rgb_data = rgb_data.repeat(64, 1, 1,1)
+                model_input = torch.cat([model_input,rgb_data], dim=1)
+            predicted_mask = model(model_input)
             
             
             ## just for vis reasons 
@@ -116,7 +124,7 @@ def train(dataset, args_train, device):
             #print('pred',pred)
             #print('rows,cols',row_index,col_index)
             #print('gt_coords',gt_coords * 80)
-            if epoch  > 100 : 
+            if epoch  > 180 : 
                 max_indices = torch.argmax(predicted_mask[0,0])
                 row_index = max_indices//80
                 col_index = max_indices%80
@@ -145,7 +153,7 @@ def train(dataset, args_train, device):
                 }, tot_iter)
                 train_loss_running = 0.
     
-    torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
+    torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}unet.ckpt')
 
 
 def main(args_train):

@@ -431,10 +431,17 @@ def create_correct_false_points_mask(grasp, bs,mask,img=None,VIS=False):
     return false_points_mask, grasps_left, grasps_right
     
 def create_correct_false_grasps_mask(grasp, bs,mask,height,img=None,VIS=False,mode='limited'):
-    wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps \
-        = create_false_grasps_mask(grasp,mask,bs,height,img=img,VIS=VIS,mode=mode)
-
-    return wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps
+    if mode == 'unlimited':
+        wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps \
+            = create_false_grasps_mask(grasp,mask,bs,height,img=img,VIS=VIS,mode=mode)
+        return wrong_far_grasps_right, wrong_far_grasps_left, wrong_mask_grasps_left,wrong_mask_grasps_right,false_grasps
+    else : 
+        false_grasps_total, grasps_left, grasps_right \
+            = create_false_grasps_mask(grasp,mask,bs,height,img=img,VIS=VIS,mode=mode)
+        return false_grasps_total
+    
+    
+    
 
 
 def create_correct_false_points(grasp, bs):
