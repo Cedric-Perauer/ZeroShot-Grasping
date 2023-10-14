@@ -68,6 +68,7 @@ def vis_image(gt_mask,x,y):
 def train(dataset, args_train, device):
     print("Training UNet Model ")
     print(args_train)
+    start_epoch = 0
     VIS = False
     n_channels = 2 
     if args_train['rgb']:
@@ -77,7 +78,12 @@ def train(dataset, args_train, device):
         dinov2 = DinoModel().cuda()    
         n_channels += 384
     print("Number of UNet channels",n_channels) 
+    
     model = UNet(n_channels=n_channels,n_classes=1)
+    if args_train['resume']:
+        checkpoint = torch.load(args_train['checkpoint'])
+        model.load_state_dict(checkpoint['weights'])
+        start_epoch = checkpoint['epoch']
     
     #l1_loss = nn.L1Loss()
     l1_loss = CustomLoss()
@@ -99,7 +105,9 @@ def train(dataset, args_train, device):
     iter = 0.
     tot_iter = 0
     
-    for epoch in range(args_train["num_epochs"]):
+    
+    for epoch in range(start_epoch,args_train["num_epochs"]):
+        print("Epoch ", epoch, "-------------")
         for i in range(len(dataset)):
             optim.zero_grad()
             data = dataset[i]
@@ -166,8 +174,11 @@ def train(dataset, args_train, device):
                     'iter': tot_iter
                 }, tot_iter)
                 train_loss_running = 0.
-    
-        torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}_unet.ckpt')
+        store_dict = {
+            'weights':model.state_dict(),
+            'epoch':epoch,
+        }
+        torch.save(store_dict, f'runs/{args_train["experiment_name"]}_unet.ckpt')
 
 
 def main(args_train):
