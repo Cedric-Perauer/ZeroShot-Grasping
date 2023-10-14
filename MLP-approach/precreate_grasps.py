@@ -52,20 +52,6 @@ def create_jsons(dataset,  args_train, device):
             
             np.save(output_dir + fn + '.npy', grasp_data)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def main(args_train):
     device = torch.device(args_train["device"])
     image_transform = get_transform()

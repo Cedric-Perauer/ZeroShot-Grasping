@@ -16,7 +16,7 @@ def index():
     start = (page - 1) * images_per_page
     end = start + images_per_page
     
-    img_pth = '512_cnt_angle_orig/train/grasps_train2018/' 
+    img_pth = '512_cnt_angle_orig/test_t/grasps_test2018/' 
     
     subfolders = os.listdir(img_pth)
     images_all = []

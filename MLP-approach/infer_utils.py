@@ -20,7 +20,7 @@ def get_features(data, model, device, args_infer):
 
     return img, mask, grasp, height, corners
 
-def get_unet_preds(unet,valid_pts_pred,mask):
+def get_unet_preds(unet,valid_pts_pred,mask,img,args_infer):
     input_masks = torch.zeros((valid_pts_pred.shape[0],2,80,80))
     for i in range(valid_pts_pred.shape[0]):
         input_mask = torch.zeros(1,2,80,80).to(mask.device)
@@ -28,7 +28,13 @@ def get_unet_preds(unet,valid_pts_pred,mask):
         x,y = valid_pts_pred[i,0,1], valid_pts_pred[i,0,0   ]
         input_mask[0,1,int(x.cpu().item()),int(y.cpu().item())] = 1 
         input_masks[i] = input_mask
-    preds = unet(input_masks.to(mask.device))
+    model_input = input_masks.to(mask.device)
+    if args_infer['rgb']:
+        img = img.unsqueeze(0)
+        img = img.repeat(model_input.shape[0],1,1,1)
+        model_input = torch.cat([model_input,img], dim=1)
+    
+    preds = unet(model_input)
     max_indices_1d = torch.argmax(preds.view(valid_pts_pred.shape[0], -1), dim=1)
     y_indices = max_indices_1d // 80
     x_indices = max_indices_1d % 80

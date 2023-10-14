@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 import torch
 import numpy as np
 from torchvision import transforms
+from utils import get_transform_resized
 
 import os
 from PIL import Image
@@ -22,10 +23,10 @@ class JacquardSamples(Dataset):
         self.img_size = img_size
         self.dataset_root = jacquard_root + dataset_root
         self.image_transform = image_transform
+        self.resized_image = get_transform_resized()
         self.mask_transform = get_transform_mask()
         self.mask_transform_resized = get_transform_resized_mask(self.img_size//14)
         self.classes = os.listdir(self.dataset_root)
-        print('classes', self.classes)
         self.image_norm_mean = (0.485, 0.456, 0.406)
         self.image_norm_std = (0.229, 0.224, 0.225)
         self.crop = crop
@@ -79,6 +80,7 @@ class JacquardSamples(Dataset):
         img = self.image_transform(img_raw)
         mask = self.mask_transform(mask)
         path = self.image_paths[index]
+        resized_img = self.resized_image(img_raw)
 
         points_grasps, gknet_labels, corners = get_grasp(self.grasp_txts[index], self.img_size, self.crop)
         points_grasps = torch.tensor(points_grasps).squeeze()
@@ -90,6 +92,7 @@ class JacquardSamples(Dataset):
         data_dict['corners'] = torch.tensor(corners)
         data_dict['raw'] = torch.tensor(gknet_labels)
         data_dict['angle'] = []
+        data_dict['resized_img'] = resized_img
         data_dict['img_grasp'] = []
         data_dict['points_grasp_augmented'] = []
         data_dict['points_grasp_augmented2'] = []

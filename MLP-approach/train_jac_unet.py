@@ -68,7 +68,7 @@ def vis_image(gt_mask,x,y):
 def train(dataset, args_train, device):
     print("Training UNet Model ")
     print(args_train)
-    
+    VIS = False
     n_channels = 2 
     if args_train['rgb']:
         n_channels += 3
@@ -138,7 +138,7 @@ def train(dataset, args_train, device):
             #print('pred',pred)
             #print('rows,cols',row_index,col_index)
             #print('gt_coords',gt_coords * 80)
-            if epoch  > 180 : 
+            if epoch  > 180 and VIS == True: 
                 max_indices = torch.argmax(predicted_mask[0,0])
                 row_index = max_indices//80
                 col_index = max_indices%80
@@ -167,7 +167,7 @@ def train(dataset, args_train, device):
                 }, tot_iter)
                 train_loss_running = 0.
     
-    torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}unet.ckpt')
+        torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}_unet.ckpt')
 
 
 def main(args_train):

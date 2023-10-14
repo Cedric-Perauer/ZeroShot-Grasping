@@ -1,6 +1,8 @@
 import os 
 import json 
+import random 
 
+train_size = 0.001 
 
 
 def create_txt(base_dir,json_file):
@@ -29,6 +31,11 @@ def create_txt(base_dir,json_file):
             if obj not in deleted_objects : 
                 filtered_objects.append(obj)
         
+        if 'train' in json_file :
+            random.shuffle(filtered_objects)
+            num_fs = int(len(filtered_objects) * train_size)
+            filtered_objects = filtered_objects[:num_fs]
+        
         txt_name = 'train' if 'train' in json_file else 'test'
         with open('simple_jacquard_'+ txt_name +  '.txt', 'w') as f:
             f.write('Objects\n')
@@ -36,9 +43,9 @@ def create_txt(base_dir,json_file):
                 f.write(fn + '\n')
                 
     
-#base_dir = os.path.expanduser('~') + '/GraspKpNet/datasets/Jacquard/coco/512_cnt_angle_orig/train/grasps_train2018/'
-base_dir = os.path.expanduser('~') + '/GraspKpNet/datasets/Jacquard/coco/512_cnt_angle_orig/test/grasps_test2018/'
-#json_name = 'remove_objects_train.json'
-json_name = 'remove_test_images.json'
+base_dir = os.path.expanduser('~') + '/GraspKpNet/datasets/Jacquard/coco/512_cnt_angle_orig/train/grasps_train2018/'
+#base_dir = os.path.expanduser('~') + '/GraspKpNet/datasets/Jacquard/coco/512_cnt_angle_orig/test/grasps_test2018/'
+json_name = 'remove_objects_train.json'
+#json_name = 'remove_test_images.json'
 create_txt(base_dir,json_name)
 
