@@ -14,6 +14,7 @@ args_train = {
     "print_every_n": 1,
     "experiment_name": "bottle_1_double",
     'rgb': True,
+    'dino_feats': False,
 }
 
 main(args_train)

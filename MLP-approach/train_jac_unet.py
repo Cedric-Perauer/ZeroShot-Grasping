@@ -10,7 +10,9 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from unet import UNet
 import torch.nn as nn
 import matplotlib.pyplot as plt
+from dino_model import DinoModel
 torch.autograd.set_detect_anomaly(True)
+
 
 
 
@@ -66,9 +68,15 @@ def vis_image(gt_mask,x,y):
 def train(dataset, args_train, device):
     print("Training UNet Model ")
     print(args_train)
+    
     n_channels = 2 
     if args_train['rgb']:
         n_channels += 3
+    
+    if args_train['dino_feats']:
+        dinov2 = DinoModel().cuda()    
+        n_channels += 384
+    print("Number of UNet channels",n_channels) 
     model = UNet(n_channels=n_channels,n_classes=1)
     
     #l1_loss = nn.L1Loss()
@@ -91,8 +99,6 @@ def train(dataset, args_train, device):
     iter = 0.
     tot_iter = 0
     
-    
-    
     for epoch in range(args_train["num_epochs"]):
         for i in range(len(dataset)):
             optim.zero_grad()
@@ -110,9 +116,17 @@ def train(dataset, args_train, device):
             input_mask,gt_mask, gt_coords  = create_unet_mask(data['resized_mask'].to(device),grasp,args_train)
             model_input = input_mask.to(device)
             gt_mask = gt_mask.to(device)
+            
+            if args_train['dino_feats']:
+                features, clk = dinov2(img.unsqueeze(0))
+                features = features.squeeze().reshape(args_train["img_size"]//14, args_train["img_size"]//14, 384).unsqueeze(0)
+                features = features.permute(0,3,1,2)
+                features = features.repeat(input_mask.shape[0],1,1,1)
+                model_input = torch.cat([model_input,features], dim=1)
+            
             if args_train['rgb']:
                 rgb_data = data['resized_img'].to(device).unsqueeze(0)
-                rgb_data = rgb_data.repeat(64, 1, 1,1)
+                rgb_data = rgb_data.repeat(input_mask.shape[0], 1, 1,1)
                 model_input = torch.cat([model_input,rgb_data], dim=1)
             predicted_mask = model(model_input)
             
