@@ -3,7 +3,9 @@ import json
 import shutil
 import cv2
 
-
+'''
+this is a file for preparing training on parts or subsets of the whole dataset
+'''
 
 
 with open('Dataset/simple_jacquard_train.txt', 'r') as file:
@@ -52,6 +54,7 @@ for obj in ['Objects']:
         test_objs = data_dict_test[obj]
         
         for split in splits : 
+                print(split)
                 cur_base_dir = base + cur_name + '_' + split + '/'
                 if os.path.exists(cur_base_dir) == True:
                         shutil.rmtree(cur_base_dir)

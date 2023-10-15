@@ -70,26 +70,6 @@ class BCEGraspTransformer(nn.Module):
         f_reduce = self.linear_head(feats)
         return self.linear_head2(torch.cat([f_reduce, diffs], dim=1))
     
-    def forward_conv(self, feats):
-        '''
-        get conv forward features around a small feature patch 
-        '''
-        return self.conv_head(feats)
-    
-    def forward_center(self, feats):
-        '''
-        get conv forward features around a small feature patch 
-        '''
-        return self.conv_head_center(feats)
-    
-    def forward_both_convs(self,feats_fused,diffs):
-        '''
-        forward the stacked conv features through a FNN to get grasp output 
-        '''
-        return self.conv_linear_head(torch.cat([feats_fused, diffs], dim=1))
-        
-   
-    
     def forward_valid(self, feats):
         f_reduce = self.linear_head(feats)
         return self.linear_headvalid(f_reduce)

@@ -9,8 +9,8 @@ from PIL import Image
 import random
 from utils import get_grasp, get_augmented_angles, get_transform_mask, get_transform_resized_mask
 
-jacquard_root  = os.getcwd()+ r'/data/categories_mlp_1training_sample/categories/'
-
+#jacquard_root  = os.getcwd()+ r'/data/categories_mlp_1training_sample/categories/' ##for small subsets
+jacquard_root = os.getcwd()+ r'/Dataset/categories/' ##for whole dataset
 
 class JacquardSamples(Dataset):
     '''

@@ -27,6 +27,7 @@ def train(dataset, model, args_train, device):
     iter = 0.
     tot_iter = 0
     for epoch in range(args_train["num_epochs"]):
+        print("epoch ---------- ", epoch)
         for i in range(len(dataset)):
             optim.zero_grad()
             data = dataset[i]
@@ -87,20 +88,6 @@ def train(dataset, model, args_train, device):
                 }, tot_iter)
                 train_loss_running = 0.
     torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def main(args_train):

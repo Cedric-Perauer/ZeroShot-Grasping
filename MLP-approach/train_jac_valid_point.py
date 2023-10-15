@@ -7,6 +7,12 @@ from utils_train import create_correct_false_points_mask
 import random
 from pytorch_lightning.loggers import TensorBoardLogger
 
+
+'''
+this is the training script for entry point methods 
+'''
+
+
 def train(dataset, model, args_train, device):
     print("train")
     params = [
@@ -30,6 +36,7 @@ def train(dataset, model, args_train, device):
     iter = 0.
     tot_iter = 0
     for epoch in range(args_train["num_epochs"]):
+        print("epoch ----", epoch)
         for i in range(len(dataset)):
             optim.zero_grad()
             data = dataset[i]
@@ -81,12 +88,11 @@ def train(dataset, model, args_train, device):
                     mean_feats = torch.cat([mean_feats, features_1.unsqueeze(0)], dim=0)
                     mean_feats = torch.cat([mean_feats, features_2.unsqueeze(0)], dim=0)
 
-            #gt = torch.cat([torch.ones(2*args_train["batch_size"]), torch.zeros(2*args_train["batch_size"])]).to(device)
-            gt = torch.cat([torch.ones(div_bs * 2), torch.ones(div_bs * 2) * 2., torch.zeros(remaining_bs * 2)]).to(device).to(torch.int64)
+            #gt = torch.cat([torch.ones(2*args_train["batch_size"]), torch.zeros(2*args_train["batch_size"])]).to(device).to(torch.int64)
+            gt = torch.cat([torch.ones(div_bs * 2), torch.ones(div_bs * 2), torch.zeros(remaining_bs * 2)]).to(device)
             
-            pred = model.forward_valid(mean_feats)
-            target_one_hot = torch.eye(3).to(device)[gt]
-            loss = loss_bce(pred, target_one_hot)
+            pred = model.forward_valid(mean_feats).reshape(-1,)
+            loss = loss_bce(pred, gt.reshape(-1,))
             loss.backward()
             optim.step()
 
@@ -104,13 +110,14 @@ def train(dataset, model, args_train, device):
                 }, tot_iter)
                 train_loss_running = 0.
 
-    torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
+        torch.save(model.state_dict(), f'runs/{args_train["experiment_name"]}.ckpt')
 
 
 def main(args_train):
     device = torch.device(args_train["device"]) if torch.cuda.is_available() else torch.device("cpu")
     image_transform = get_transform()
-    model = BCEGraspTransformer(img_size=args_train['img_size'],int_dim=256,output_dim=128,input_cls=3)
+    model = BCEGraspTransformer(img_size=args_train['img_size'],int_dim=256,output_dim=128,input_cls=1)
+    print(model)
     dataset = JacquardSamples(dataset_root=args_train["split"], image_transform=image_transform, num_targets=5,
                               overfit=False,
                               img_size=args_train["img_size"], idx=args_train["num_objects"])
