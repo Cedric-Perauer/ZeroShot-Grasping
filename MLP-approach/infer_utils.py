@@ -481,7 +481,7 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
             correct_cnt += 1
         total_cnt += 1
         
-        if True == True : 
+        if vis == True : 
             for pt in best_corner_pts : 
                 new_x = int(pt[0]) 
                 new_y = int(pt[1])
