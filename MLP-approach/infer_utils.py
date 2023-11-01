@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from utils import *
 import time
 from metrics_utils import *
+import torch.nn.functional as F
 
 def get_features(data, model, device, args_infer):
     img = data["img"].to(device)
@@ -20,7 +21,8 @@ def get_features(data, model, device, args_infer):
 
     return img, mask, grasp, height, corners
 
-def get_unet_preds(unet,valid_pts_pred,mask,img,args_infer):
+def get_unet_preds(unet,valid_pts_pred,mask,img,args_infer,vis_preds):
+    k = 100 
     input_masks = torch.zeros((valid_pts_pred.shape[0],2,80,80))
     for i in range(valid_pts_pred.shape[0]):
         input_mask = torch.zeros(1,2,80,80).to(mask.device)
@@ -35,14 +37,35 @@ def get_unet_preds(unet,valid_pts_pred,mask,img,args_infer):
         model_input = torch.cat([model_input,img], dim=1)
     
     preds = unet(model_input)
-    max_indices_1d = torch.argmax(preds.view(valid_pts_pred.shape[0], -1), dim=1)
+    
+    
+    ## Step 1: Flatten the tensor
+    #flattened_tensor = preds.flatten()
+
+    # Step 2: Get the top k elements and their indices
+    #values, indices = torch.topk(flattened_tensor[], k)
+
+    # Step 3: Create a zero tensor with the same shape as the original tensor
+    #mask = torch.zeros_like(flattened_tensor)
+
+    # Step 4: Set the top k positions to 1
+    #mask[indices] = 1
+
+    # Reshape the mask to the original tensor's shape
+    #mask = mask.reshape_as(preds)
+    
+    softmax_output = F.softmax(preds.view(-1, 80 * 80), dim=1).view_as(preds)
+    
+    
+    max_indices_1d = torch.argmax(softmax_output.view(valid_pts_pred.shape[0], -1), dim=1)
     y_indices = max_indices_1d // 80
     x_indices = max_indices_1d % 80
-    breakpoint()
-    conf_vals = preds[torch.arange(preds.shape[0]), :, x_indices, y_indices] 
-    max_indices = torch.stack((x_indices, y_indices), dim=-1), conf_vals
     
-    return max_indices
+    conf_vals = softmax_output[torch.arange(preds.shape[0]), :, y_indices, x_indices] 
+    max_indices = torch.stack((x_indices, y_indices), dim=-1)
+    #print(torch.max(softmax_output.view(5, -1), dim=1))
+    #print(conf_vals)
+    return max_indices,conf_vals
 
 
 def test_single_point(grasp, mask, device, features, model, args_infer, point_idx,heights,single_point=None):
