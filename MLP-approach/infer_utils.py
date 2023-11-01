@@ -38,6 +38,7 @@ def get_unet_preds(unet,valid_pts_pred,mask,img,args_infer):
     max_indices_1d = torch.argmax(preds.view(valid_pts_pred.shape[0], -1), dim=1)
     y_indices = max_indices_1d // 80
     x_indices = max_indices_1d % 80
+    breakpoint()
     conf_vals = preds[torch.arange(preds.shape[0]), :, x_indices, y_indices] 
     max_indices = torch.stack((x_indices, y_indices), dim=-1), conf_vals
     
@@ -503,7 +504,7 @@ def vis_preds_with_metrics(num_grasps,items,org_image,grasp,heights,args_infer,p
             show_img = org_image + 0.7*preds.cpu().detach().numpy() + 0.7*origin_point
             #show_img = org_image + 0.7*origin_point2 + 0.7*origin_point
             plt.imshow(show_img)
-            #plt.title("iou : {} | angle offset : {} degrees |  correct : {} | grasp conf : {}".format(round(best_iou,2),round(best_angle_diff.item(),2)  , correct_end, round(conf,2)))
+            plt.title("iou : {} | angle offset : {} degrees |  correct : {} | grasp conf : {}".format(round(best_iou,2),round(best_angle_diff.item(),2)  , correct_end, round(conf,2)))
             #plt.savefig('store_dir/{}.png'.format(i))
             #plt.close()
         
